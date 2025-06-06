@@ -6,6 +6,12 @@ pub use parser::parser;
 pub use types::{SpannedValue, ValType, Value, ValueKind};
 pub use unify::{UnifyError, unify, unify_spanned, unify_tree, unify_with_path};
 
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
+#[cfg(feature = "wasm")]
+pub use wasm::polsia_to_json;
+
 #[cfg(test)]
 mod tests {
     use super::*;

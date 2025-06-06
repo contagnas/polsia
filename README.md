@@ -44,3 +44,13 @@ cargo fmt -- --check
 cargo clippy -- -D warnings
 cargo test
 ```
+
+### Web playground
+
+Build the WebAssembly package using [wasm-pack](https://github.com/rustwasm/wasm-pack):
+
+```bash
+wasm-pack build --target web --release -- --features wasm
+```
+
+Open `index.html` in a browser to try the playground.

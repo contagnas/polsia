@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Polsia Playground</title>
+<style>
+body { display: flex; height: 100vh; margin: 0; }
+textarea { flex: 1; padding: 10px; font-family: monospace; }
+pre { flex: 1; margin: 0; padding: 10px; overflow: auto; background:#f0f0f0; }
+</style>
+</head>
+<body>
+<textarea id="input">foo: 1</textarea>
+<pre id="output"></pre>
+<script type="module">
+import init, { polsia_to_json } from './pkg/polsia.js';
+async function run() {
+  await init();
+  const input = document.getElementById('input');
+  const output = document.getElementById('output');
+  function update() {
+    try {
+      output.textContent = polsia_to_json(input.value);
+    } catch(e) {
+      output.textContent = 'Error: ' + e;
+    }
+  }
+  input.addEventListener('input', update);
+  update();
+}
+run();
+</script>
+</body>
+</html>

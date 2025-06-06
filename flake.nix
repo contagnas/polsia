@@ -18,7 +18,10 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = [ rustToolchain ];
+          buildInputs = [
+            rustToolchain
+            pkgs.wasm-pack
+          ];
         };
       }
     );
