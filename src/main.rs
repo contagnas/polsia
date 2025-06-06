@@ -26,6 +26,18 @@ enum JsonType {
     String,
 }
 
+fn type_name(t: &JsonType) -> &'static str {
+    match t {
+        JsonType::Any => "Any",
+        JsonType::Nothing => "Nothing",
+        JsonType::Int => "Int",
+        JsonType::Number => "Number",
+        JsonType::Rational => "Rational",
+        JsonType::Float => "Float",
+        JsonType::String => "String",
+    }
+}
+
 fn unify_types(a: &JsonType, b: &JsonType) -> Result<JsonType, String> {
     if a == b {
         return Ok(a.clone());
@@ -56,7 +68,11 @@ fn unify_types(a: &JsonType, b: &JsonType) -> Result<JsonType, String> {
                 _ => JsonType::Number,
             })
         }
-        _ => Err("incompatible types".into()),
+        _ => Err(format!(
+            "{} cannot be unified with {}",
+            type_name(a),
+            type_name(b)
+        )),
     }
 }
 
@@ -173,24 +189,24 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                 just('{').padded_by(ws.clone()),
                 just('}').padded_by(ws.clone()),
             )
-            .try_map(|members: Vec<(String, Json, Span)>, _span| {
+            .validate(|members: Vec<(String, Json, Span)>, _extra, emit| {
                 use chumsky::error::LabelError;
                 use std::collections::hash_map::HashMap;
                 let mut seen: HashMap<&str, (Json, Span)> = HashMap::new();
                 for (k, v, span) in &members {
                     match seen.get(k.as_str()) {
                         Some((prev, prev_span)) => {
-                            if unify(prev, v).is_err() {
+                            if let Err(msg) = unify(prev, v) {
                                 let mut err = Rich::custom(
                                     span.clone(),
-                                    format!("duplicate key '{}' could not be unified", k),
+                                    format!("duplicate key '{}' could not be unified: {}", k, msg),
                                 );
                                 <Rich<_> as LabelError<&str, _>>::in_context(
                                     &mut err,
                                     "previous value here",
                                     prev_span.clone(),
                                 );
-                                return Err(err);
+                                emit.emit(err);
                             }
                         }
                         None => {
@@ -198,9 +214,7 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                         }
                     }
                 }
-                Ok(Json::Object(
-                    members.into_iter().map(|(k, v, _)| (k, v)).collect(),
-                ))
+                Json::Object(members.into_iter().map(|(k, v, _)| (k, v)).collect())
             });
 
         choice((
@@ -370,5 +384,26 @@ mod tests {
     fn unify_string_with_value() {
         let src = r#"{ "a": String, "a": "hi" }"#;
         assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn duplicate_key_error_details() {
+        let src = "{\n    hello: Int,\n    hello: String,\n}";
+        let result = parser().parse(src).into_result();
+        match result {
+            Ok(_) => panic!("expected error"),
+            Err(errs) => {
+                assert!(!errs.is_empty());
+                let err = &errs[0];
+                let msg = err.to_string();
+                assert!(msg.contains("Int"));
+                assert!(msg.contains("String"));
+                let span = err.span().clone().into_range();
+                let prev_span = err.contexts().next().unwrap().1.into_range();
+                let line_for = |i: usize| src[..i].chars().filter(|&c| c == '\n').count() + 1;
+                assert_eq!(line_for(span.start), 3);
+                assert_eq!(line_for(prev_span.start), 2);
+            }
+        }
     }
 }
