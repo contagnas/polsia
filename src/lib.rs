@@ -81,7 +81,7 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
             unified.to_value(),
-            Json::Object(vec![("a".into(), Json::Number(1.0))])
+            Value::Object(vec![("a".into(), Value::Number(1.0))])
         );
     }
 
@@ -288,13 +288,13 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
-            unified.to_json(),
-            Json::Object(vec![
+            unified.to_value(),
+            Value::Object(vec![
                 (
                     "foo".into(),
-                    Json::Object(vec![
-                        ("bar".into(), Json::Number(1.0)),
-                        ("baz".into(), Json::Number(2.0)),
+                    Value::Object(vec![
+                        ("bar".into(), Value::Number(1.0)),
+                        ("baz".into(), Value::Number(2.0)),
                     ]),
                 ),
             ])
@@ -307,11 +307,11 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
-            unified.to_json(),
-            Json::Object(vec![
+            unified.to_value(),
+            Value::Object(vec![
                 (
                     "company".into(),
-                    Json::Object(vec![("founded".into(), Json::Number(1985.0))]),
+                    Value::Object(vec![("founded".into(), Value::Number(1985.0))]),
                 ),
             ])
         );
