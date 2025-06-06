@@ -81,10 +81,7 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
             unified.to_value(),
-            Value::Object(vec![
-                ("a".into(), Value::Number(1.0)),
-                ("a".into(), Value::Number(1.0)),
-            ])
+            Json::Object(vec![("a".into(), Json::Number(1.0))])
         );
     }
 
@@ -289,6 +286,34 @@ mod tests {
     fn chain_with_duplicate_keys_no_commas() {
         let src = "foo: bar: 1\nfoo: baz: 2\n";
         let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        let unified = unify_tree(&parsed).unwrap();
+        assert_eq!(
+            unified.to_json(),
+            Json::Object(vec![
+                (
+                    "foo".into(),
+                    Json::Object(vec![
+                        ("bar".into(), Json::Number(1.0)),
+                        ("baz".into(), Json::Number(2.0)),
+                    ]),
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn unify_type_is_overwritten_by_value() {
+        let src = "company: founded: Int\ncompany: founded: 1985\n";
+        let parsed = parser().parse(src).into_result().unwrap();
+        let unified = unify_tree(&parsed).unwrap();
+        assert_eq!(
+            unified.to_json(),
+            Json::Object(vec![
+                (
+                    "company".into(),
+                    Json::Object(vec![("founded".into(), Json::Number(1985.0))]),
+                ),
+            ])
+        );
     }
 }

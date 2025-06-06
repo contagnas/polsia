@@ -192,7 +192,8 @@ fn unify_tree_inner(value: &SpannedValue, path: &str) -> Result<SpannedValue, Un
         }
         ValueKind::Object(members) => {
             use std::collections::HashMap;
-            let mut seen: HashMap<String, SpannedValue> = HashMap::new();
+            // Preserve the order of first appearance while merging duplicates
+            let mut indices: HashMap<String, usize> = HashMap::new();
             let mut out: Vec<(String, SpannedValue, Span)> = Vec::new();
             for (k, v, span) in members {
                 let new_path = if path.is_empty() {
@@ -201,13 +202,14 @@ fn unify_tree_inner(value: &SpannedValue, path: &str) -> Result<SpannedValue, Un
                     format!("{}.{}", path, k)
                 };
                 let unified_v = unify_tree_inner(v, &new_path)?;
-                if let Some(prev) = seen.get(k) {
-                    let merged = unify_spanned(prev, &unified_v, &new_path)?;
-                    seen.insert(k.clone(), merged);
+                if let Some(i) = indices.get(k).copied() {
+                    let prev = out[i].1.clone();
+                    let merged = unify_spanned(&prev, &unified_v, &new_path)?;
+                    out[i].1 = merged;
                 } else {
-                    seen.insert(k.clone(), unified_v.clone());
+                    indices.insert(k.clone(), out.len());
+                    out.push((k.clone(), unified_v, *span));
                 }
-                out.push((k.clone(), unified_v, *span));
             }
             Ok(SpannedValue {
                 span: value.span,
