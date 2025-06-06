@@ -9,6 +9,85 @@ enum Json {
     String(String),
     Array(Vec<Json>),
     Object(Vec<(String, Json)>),
+    Type(JsonType),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum JsonType {
+    Any,
+    Nothing,
+    Int,
+    Number,
+    Rational,
+    Float,
+    String,
+}
+
+fn unify_types(a: &JsonType, b: &JsonType) -> Result<JsonType, String> {
+    if a == b {
+        return Ok(a.clone());
+    }
+    if matches!(a, JsonType::Any) {
+        return Ok(b.clone());
+    }
+    if matches!(b, JsonType::Any) {
+        return Ok(a.clone());
+    }
+    if matches!(a, JsonType::Nothing) || matches!(b, JsonType::Nothing) {
+        return Err("cannot unify Nothing".into());
+    }
+    let rank = |t: &JsonType| match t {
+        JsonType::Int => Some(0),
+        JsonType::Rational => Some(1),
+        JsonType::Float => Some(2),
+        JsonType::Number => Some(3),
+        _ => None,
+    };
+    match (rank(a), rank(b)) {
+        (Some(ra), Some(rb)) => {
+            let r = ra.max(rb);
+            Ok(match r {
+                0 => JsonType::Int,
+                1 => JsonType::Rational,
+                2 => JsonType::Float,
+                _ => JsonType::Number,
+            })
+        }
+        _ => Err("incompatible types".into()),
+    }
+}
+
+fn unify_type_value(t: &JsonType, val: &Json) -> Result<Json, String> {
+    match t {
+        JsonType::Any => Ok(val.clone()),
+        JsonType::Nothing => Err("cannot unify Nothing".into()),
+        JsonType::Int => match val {
+            Json::Number(n) if n.fract() == 0.0 => Ok(Json::Number(*n)),
+            Json::Type(other) => unify_types(t, other).map(Json::Type),
+            _ => Err("expected integer".into()),
+        },
+        JsonType::Rational | JsonType::Float | JsonType::Number => match val {
+            Json::Number(n) => Ok(Json::Number(*n)),
+            Json::Type(other) => unify_types(t, other).map(Json::Type),
+            _ => Err("expected number".into()),
+        },
+        JsonType::String => match val {
+            Json::String(s) => Ok(Json::String(s.clone())),
+            Json::Type(other) => unify_types(t, other).map(Json::Type),
+            _ => Err("expected string".into()),
+        },
+    }
+}
+
+fn unify(a: &Json, b: &Json) -> Result<Json, String> {
+    if a == b {
+        return Ok(a.clone());
+    }
+    match (a, b) {
+        (Json::Type(ta), Json::Type(tb)) => unify_types(ta, tb).map(Json::Type),
+        (Json::Type(t), val) | (val, Json::Type(t)) => unify_type_value(t, val),
+        _ => Err("values do not unify".into()),
+    }
 }
 
 fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
@@ -96,10 +175,10 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                 for (k, v) in &members {
                     match seen.entry(k.as_str()) {
                         Entry::Occupied(entry) => {
-                            if *entry.get() != v {
+                            if unify(entry.get(), v).is_err() {
                                 return Err(Rich::custom(
                                     span,
-                                    format!("duplicate key '{}' with differing values", k),
+                                    format!("duplicate key '{}' could not be unified", k),
                                 ));
                             }
                         }
@@ -115,6 +194,13 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
             just("null").to(Json::Null),
             just("true").to(Json::Bool(true)),
             just("false").to(Json::Bool(false)),
+            just("Any").to(Json::Type(JsonType::Any)),
+            just("Nothing").to(Json::Type(JsonType::Nothing)),
+            just("Int").to(Json::Type(JsonType::Int)),
+            just("Number").to(Json::Type(JsonType::Number)),
+            just("Rational").to(Json::Type(JsonType::Rational)),
+            just("Float").to(Json::Type(JsonType::Float)),
+            just("String").to(Json::Type(JsonType::String)),
             number,
             string,
             array,
@@ -219,5 +305,41 @@ mod tests {
     fn object_with_duplicate_keys_different() {
         let src = r#"{ "a": 1, "a": 2 }"#;
         assert!(parser().parse(src).into_result().is_err());
+    }
+
+    #[test]
+    fn unify_type_with_value() {
+        let src = r#"{ "a": Int, "a": 1 }"#;
+        assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn unify_type_with_incompatible_value() {
+        let src = r#"{ "a": Int, "a": 1.1 }"#;
+        assert!(parser().parse(src).into_result().is_err());
+    }
+
+    #[test]
+    fn unify_any_with_value() {
+        let src = r#"{ "a": Any, "a": 1 }"#;
+        assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn unify_nothing_with_value() {
+        let src = r#"{ "a": Nothing, "a": 1 }"#;
+        assert!(parser().parse(src).into_result().is_err());
+    }
+
+    #[test]
+    fn unify_number_hierarchy() {
+        let src = r#"{ "a": Int, "a": Float }"#;
+        assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn unify_string_with_value() {
+        let src = r#"{ "a": String, "a": "hi" }"#;
+        assert!(parser().parse(src).into_result().is_ok());
     }
 }
