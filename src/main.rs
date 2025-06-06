@@ -319,10 +319,119 @@ fn unify_with_path(a: &Json, b: &Json, path: &str) -> Result<Json, String> {
 }
 
 fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
-    spanned_value().map(|v| v.to_json())
+    let value = spanned_value();
+
+    let comment = just('#')
+        .then(none_of('\n').repeated())
+        .then_ignore(text::newline().or_not())
+        .ignored();
+    let ws = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+        .repeated()
+        .ignored();
+    let ws1 = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+        .repeated()
+        .at_least(1)
+        .ignored();
+
+    let escape =
+        just('\\').ignore_then(choice((
+            just('\\'),
+            just('/'),
+            just('"'),
+            just('b').to('\x08'),
+            just('f').to('\x0c'),
+            just('n').to('\n'),
+            just('r').to('\r'),
+            just('t').to('\t'),
+            just('u').ignore_then(text::digits(16).exactly(4).to_slice().map(|digits: &str| {
+                char::from_u32(u32::from_str_radix(digits, 16).unwrap()).unwrap()
+            })),
+        )));
+
+    let string = none_of("\\\"")
+        .or(escape)
+        .repeated()
+        .collect::<String>()
+        .delimited_by(just('"'), just('"'))
+        .map(|s| s);
+
+    let key_string = string.clone();
+    let key = key_string.or(text::ident().map(|s: &str| s.to_string()));
+    let key_span = key.clone().map_with(|k: String, e| (k, e.span()));
+
+    let member = key_span
+        .then_ignore(just(':').padded_by(ws.clone()))
+        .then(spanned_value_no_pad())
+        .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
+            let span = SimpleSpan::new((), k_span.start()..v.span.end());
+            v.span = span;
+            (k, v, span)
+        });
+
+    let comma = just(',').then_ignore(ws.clone()).ignored();
+    let top_object = member
+        .separated_by(choice((comma, ws1.clone())))
+        .allow_trailing()
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .validate(|members: Vec<(String, SpannedJson, Span)>, _extra, emit| {
+            use chumsky::error::LabelError;
+            use std::collections::hash_map::HashMap;
+            let mut seen: HashMap<String, SpannedJson> = HashMap::new();
+            let mut out: Vec<(String, SpannedJson, Span)> = Vec::new();
+            for (k, v, span) in members {
+                match seen.get(k.as_str()) {
+                    Some(prev) => match unify_spanned(prev, &v, &k) {
+                        Ok(unified) => {
+                            seen.insert(k.clone(), unified);
+                            out.push((k, v, span));
+                        }
+                        Err(err) => {
+                            let mut e = Rich::custom(
+                                err.span.clone(),
+                                format!("duplicate key '{}' could not be unified: {}", k, err.msg),
+                            );
+                            <Rich<_> as LabelError<&str, _>>::in_context(
+                                &mut e,
+                                "previous value here",
+                                err.prev_span.clone(),
+                            );
+                            emit.emit(e);
+                        }
+                    },
+                    None => {
+                        seen.insert(k.clone(), v.clone());
+                        out.push((k, v, span));
+                    }
+                }
+            }
+            out
+        })
+        .map_with(|members, e| SpannedJson {
+            span: e.span(),
+            kind: SpannedKind::Object(members),
+        });
+
+    choice((top_object, value))
+        .padded_by(ws)
+        .map(|v| v.to_json())
 }
 
 fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
+    spanned_value_no_pad().padded_by(
+        choice((
+            text::whitespace().at_least(1).ignored(),
+            just('#')
+                .then(none_of('\n').repeated())
+                .then_ignore(text::newline().or_not())
+                .ignored(),
+        ))
+        .repeated()
+        .ignored(),
+    )
+}
+
+fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
     recursive(|value| {
         let comment = just('#')
             .then(none_of('\n').repeated())
@@ -331,8 +440,14 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
         let ws = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
             .repeated()
             .ignored();
+        let ws1 = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+            .repeated()
+            .at_least(1)
+            .ignored();
         let digits = text::digits(10);
         let int = text::int(10);
+
+        let value_padded = value.clone().padded_by(ws.clone());
 
         let number = just('-')
             .or_not()
@@ -374,7 +489,7 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
                 kind: SpannedKind::String(s),
             });
 
-        let array = value
+        let array = value_padded
             .clone()
             .separated_by(just(',').padded_by(ws.clone()))
             .allow_trailing()
@@ -405,14 +520,15 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
 
         let member = key_span
             .then_ignore(just(':').padded_by(ws.clone()))
-            .then(value.clone())
+            .then(value_padded.clone())
             .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
                 let span = SimpleSpan::new((), k_span.start()..v.span.end());
                 v.span = span;
                 (k, v, span)
             });
+        let comma = just(',').then_ignore(ws.clone()).ignored();
         let object = member
-            .separated_by(just(',').padded_by(ws.clone()))
+            .separated_by(choice((comma, ws1.clone())))
             .allow_trailing()
             .collect::<Vec<_>>()
             .delimited_by(
@@ -460,6 +576,24 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
                 kind: SpannedKind::Object(members),
             });
 
+        let chain = key_span
+            .clone()
+            .then_ignore(just(':').padded_by(ws.clone()))
+            .repeated()
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .then(value_padded.clone())
+            .map(|(keys, mut v)| {
+                for (k, k_span) in keys.into_iter().rev() {
+                    let span = SimpleSpan::new((), k_span.start()..v.span.end());
+                    v = SpannedJson {
+                        span,
+                        kind: SpannedKind::Object(vec![(k, v, span)]),
+                    };
+                }
+                v
+            });
+
         choice((
             just("null").map_with(|_, e| SpannedJson {
                 span: e.span(),
@@ -505,8 +639,8 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
             string,
             array,
             object,
+            chain,
         ))
-        .padded_by(ws)
     })
 }
 
@@ -757,5 +891,34 @@ mod tests {
             }
         "#;
         assert!(parser().parse(src).into_result().is_err());
+    }
+
+    #[test]
+    fn top_level_braces_optional() {
+        let with_braces = "{ foo: 1, bar: 2, }";
+        let without_braces = "foo: 1,\nbar: 2,\n";
+        let a = parser().parse(with_braces).into_result().unwrap();
+        let b = parser().parse(without_braces).into_result().unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn single_key_chain_without_braces() {
+        let src = "foo: bar: baz: 1";
+        let expected = parser()
+            .parse("foo: { bar: { baz: 1 } }")
+            .into_result()
+            .unwrap();
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn object_commas_optional() {
+        let with_commas = "foo: 1,\nbar: 2,\n";
+        let without_commas = "foo: 1\nbar: 2\n";
+        let a = parser().parse(with_commas).into_result().unwrap();
+        let b = parser().parse(without_commas).into_result().unwrap();
+        assert_eq!(a, b);
     }
 }
