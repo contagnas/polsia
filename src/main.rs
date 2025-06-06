@@ -1,4 +1,5 @@
 use chumsky::prelude::*;
+use ariadne::{sources, Label, Report, ReportKind};
 use std::{env, fs};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -213,12 +214,19 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
 fn main() {
     let filename = env::args().nth(1).expect("expected file argument");
     let src = fs::read_to_string(&filename).expect("failed to read file");
-    let result = parser().parse(src.trim()).into_result();
+    let result = parser().parse(&src).into_result();
     match result {
         Ok(json) => println!("{:#?}", json),
         Err(errs) => {
             for e in errs {
-                eprintln!("Error: {}", e);
+                let span = e.span().clone().into_range();
+                let msg = e.to_string();
+                Report::build(ReportKind::Error, (filename.clone(), span.clone()))
+                    .with_message(&msg)
+                    .with_label(Label::new((filename.clone(), span)).with_message(&msg))
+                    .finish()
+                    .print(sources([(filename.clone(), src.as_str())]))
+                    .unwrap();
             }
         }
     }
