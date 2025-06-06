@@ -427,7 +427,8 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
                 for (k, v, span) in members {
                     match seen.get(k.as_str()) {
                         Some(prev) => match unify_spanned(prev, &v, &k) {
-                            Ok(_) => {
+                            Ok(unified) => {
+                                seen.insert(k.clone(), unified);
                                 out.push((k, v, span));
                             }
                             Err(err) => {
@@ -744,5 +745,17 @@ mod tests {
                 assert!(src[prev_span.start..prev_span.end].contains("bar"));
             }
         }
+    }
+
+    #[test]
+    fn conflicting_nested_duplicates_fail() {
+        let src = r#"
+            {
+                foo: { bar: 1 },
+                foo: { baz: 2 },
+                foo: { baz: String },
+            }
+        "#;
+        assert!(parser().parse(src).into_result().is_err());
     }
 }
