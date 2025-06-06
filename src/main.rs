@@ -11,7 +11,7 @@ enum Json {
     Object(Vec<(String, Json)>),
 }
 
-fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Simple<'a, char>>> {
+fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
     recursive(|value| {
         let comment = just('#')
             .then(none_of('\n').repeated())
@@ -90,7 +90,26 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Simple<'a, char>>> 
                 just('{').padded_by(ws.clone()),
                 just('}').padded_by(ws.clone()),
             )
-            .map(Json::Object);
+            .try_map(|members: Vec<(String, Json)>, span| {
+                use std::collections::hash_map::{Entry, HashMap};
+                let mut seen: HashMap<&str, &Json> = HashMap::new();
+                for (k, v) in &members {
+                    match seen.entry(k.as_str()) {
+                        Entry::Occupied(entry) => {
+                            if *entry.get() != v {
+                                return Err(Rich::custom(
+                                    span,
+                                    format!("duplicate key '{}' with differing values", k),
+                                ));
+                            }
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(v);
+                        }
+                    }
+                }
+                Ok(Json::Object(members))
+            });
 
         choice((
             just("null").to(Json::Null),
@@ -181,5 +200,24 @@ mod tests {
                 ),
             ])
         );
+    }
+
+    #[test]
+    fn object_with_duplicate_keys_equal() {
+        let src = r#"{ "a": 1, "a": 1 }"#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert_eq!(
+            parsed,
+            Json::Object(vec![
+                ("a".into(), Json::Number(1.0)),
+                ("a".into(), Json::Number(1.0)),
+            ])
+        );
+    }
+
+    #[test]
+    fn object_with_duplicate_keys_different() {
+        let src = r#"{ "a": 1, "a": 2 }"#;
+        assert!(parser().parse(src).into_result().is_err());
     }
 }
