@@ -1,5 +1,5 @@
 use crate::{parser, unify_tree};
-use ariadne::{Color, Label, Report, ReportKind, sources};
+use ariadne::{Color, Label, Report, ReportKind, Config, sources};
 use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
 
@@ -40,6 +40,7 @@ pub fn polsia_to_json(src: &str) -> Result<String, String> {
                     let span_range = span.into_range();
                     let mut buf = Vec::new();
                     Report::build(ReportKind::Error, (filename.clone(), span_range.clone()))
+                        .with_config(Config::default().with_color(false))
                         .with_message(&msg)
                         .with_label(
                             Label::new((filename.clone(), span_range))
@@ -66,6 +67,7 @@ pub fn polsia_to_json(src: &str) -> Result<String, String> {
                 let msg = e.to_string();
                 let mut buf = Vec::new();
                 Report::build(ReportKind::Error, (filename.clone(), span.clone()))
+                    .with_config(Config::default().with_color(false))
                     .with_message(&msg)
                     .with_label(
                         Label::new((filename.clone(), span.clone()))
@@ -90,6 +92,7 @@ pub fn polsia_to_json(src: &str) -> Result<String, String> {
                 let msg = e.to_string();
                 let mut buf = Vec::new();
                 Report::build(ReportKind::Error, (filename.clone(), span.clone()))
+                    .with_config(Config::default().with_color(false))
                     .with_message(&msg)
                     .with_label(
                         Label::new((filename.clone(), span.clone()))

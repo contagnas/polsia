@@ -6,11 +6,17 @@
 <style>
 body { display: flex; height: 100vh; margin: 0; }
 textarea { flex: 1; padding: 10px; font-family: monospace; }
-pre { flex: 1; margin: 0; padding: 10px; overflow: auto; background:#f0f0f0; }
+pre { flex: 1; margin: 0; padding: 10px; overflow: auto; background:#f0f0f0; white-space: pre-wrap; font-family: monospace; }
 </style>
 </head>
 <body>
-<textarea id="input">foo: 1</textarea>
+<textarea id="input"># Demo of all features
+numbers: [1, 2, 3,]
+settings: debug: true
+person:
+  name: String,
+  age: Int,
+person: name: "Alice", age: 30</textarea>
 <pre id="output"></pre>
 <script type="module">
 import init, { polsia_to_json } from './pkg/polsia.js';
