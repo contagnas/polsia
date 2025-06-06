@@ -1,5 +1,7 @@
 use chumsky::prelude::*;
-use ariadne::{sources, Label, Report, ReportKind};
+use chumsky::span::SimpleSpan;
+type Span = SimpleSpan<usize>;
+use ariadne::{Color, Label, Report, ReportKind, sources};
 use std::{env, fs};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,7 +163,8 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
 
         let member = key
             .then_ignore(just(':').padded_by(ws.clone()))
-            .then(value.clone());
+            .then(value.clone().map_with(|v, e| (v, e.span())))
+            .map(|(k, (v, span))| (k, v, span));
         let object = member
             .separated_by(just(',').padded_by(ws.clone()))
             .allow_trailing()
@@ -170,25 +173,34 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                 just('{').padded_by(ws.clone()),
                 just('}').padded_by(ws.clone()),
             )
-            .try_map(|members: Vec<(String, Json)>, span| {
-                use std::collections::hash_map::{Entry, HashMap};
-                let mut seen: HashMap<&str, &Json> = HashMap::new();
-                for (k, v) in &members {
-                    match seen.entry(k.as_str()) {
-                        Entry::Occupied(entry) => {
-                            if unify(entry.get(), v).is_err() {
-                                return Err(Rich::custom(
-                                    span,
+            .try_map(|members: Vec<(String, Json, Span)>, _span| {
+                use chumsky::error::LabelError;
+                use std::collections::hash_map::HashMap;
+                let mut seen: HashMap<&str, (Json, Span)> = HashMap::new();
+                for (k, v, span) in &members {
+                    match seen.get(k.as_str()) {
+                        Some((prev, prev_span)) => {
+                            if unify(prev, v).is_err() {
+                                let mut err = Rich::custom(
+                                    span.clone(),
                                     format!("duplicate key '{}' could not be unified", k),
-                                ));
+                                );
+                                <Rich<_> as LabelError<&str, _>>::in_context(
+                                    &mut err,
+                                    "previous value here",
+                                    prev_span.clone(),
+                                );
+                                return Err(err);
                             }
                         }
-                        Entry::Vacant(entry) => {
-                            entry.insert(v);
+                        None => {
+                            seen.insert(k.as_str(), (v.clone(), span.clone()));
                         }
                     }
                 }
-                Ok(Json::Object(members))
+                Ok(Json::Object(
+                    members.into_iter().map(|(k, v, _)| (k, v)).collect(),
+                ))
             });
 
         choice((
@@ -223,7 +235,16 @@ fn main() {
                 let msg = e.to_string();
                 Report::build(ReportKind::Error, (filename.clone(), span.clone()))
                     .with_message(&msg)
-                    .with_label(Label::new((filename.clone(), span)).with_message(&msg))
+                    .with_label(
+                        Label::new((filename.clone(), span.clone()))
+                            .with_message(&msg)
+                            .with_color(Color::Red),
+                    )
+                    .with_labels(e.contexts().map(|(label, span)| {
+                        Label::new((filename.clone(), span.into_range()))
+                            .with_message(label.to_string())
+                            .with_color(Color::Yellow)
+                    }))
                     .finish()
                     .print(sources([(filename.clone(), src.as_str())]))
                     .unwrap();
