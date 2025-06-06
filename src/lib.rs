@@ -295,15 +295,13 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
             unified.to_value(),
-            Value::Object(vec![
-                (
-                    "foo".into(),
-                    Value::Object(vec![
-                        ("bar".into(), Value::Number(1.0)),
-                        ("baz".into(), Value::Number(2.0)),
-                    ]),
-                ),
-            ])
+            Value::Object(vec![(
+                "foo".into(),
+                Value::Object(vec![
+                    ("bar".into(), Value::Number(1.0)),
+                    ("baz".into(), Value::Number(2.0)),
+                ]),
+            ),])
         );
     }
 
@@ -314,12 +312,10 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
             unified.to_value(),
-            Value::Object(vec![
-                (
-                    "company".into(),
-                    Value::Object(vec![("founded".into(), Value::Number(1985.0))]),
-                ),
-            ])
+            Value::Object(vec![(
+                "company".into(),
+                Value::Object(vec![("founded".into(), Value::Number(1985.0))]),
+            ),])
         );
     }
 }

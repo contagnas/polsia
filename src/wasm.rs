@@ -1,5 +1,5 @@
-use wasm_bindgen::prelude::*;
 use crate::{parser, unify_tree};
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn polsia_to_json(src: &str) -> Result<String, String> {

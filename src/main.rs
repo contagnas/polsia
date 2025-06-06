@@ -1,7 +1,7 @@
-use polsia::types::Span;
-use polsia::{ValType, SpannedValue, ValueKind, parser, unify_tree};
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
+use polsia::types::Span;
+use polsia::{SpannedValue, ValType, ValueKind, parser, unify_tree};
 use std::{env, fs};
 
 fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
