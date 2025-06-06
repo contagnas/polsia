@@ -1,7 +1,31 @@
+use polsia::types::Span;
+use polsia::{ValType, SpannedValue, ValueKind, parser, unify_tree};
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
-use polsia::{parser, unify_tree};
 use std::{env, fs};
+
+fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
+    match &value.kind {
+        ValueKind::Type(t) => Some((value.span, t.clone())),
+        ValueKind::Array(items) => {
+            for item in items {
+                if let Some(res) = find_unresolved(item) {
+                    return Some(res);
+                }
+            }
+            None
+        }
+        ValueKind::Object(members) => {
+            for (_, v, _) in members {
+                if let Some(res) = find_unresolved(v) {
+                    return Some(res);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
 
 fn main() {
     let filename = env::args().nth(1).expect("expected file argument");
@@ -9,7 +33,24 @@ fn main() {
     let parse_result = parser().parse(&src).into_result();
     match parse_result {
         Ok(ast) => match unify_tree(&ast) {
-            Ok(value) => println!("{:#?}", value.to_value()),
+            Ok(value) => {
+                if let Some((span, t)) = find_unresolved(&value) {
+                    let msg = format!("value of type {:?} is unspecified", t);
+                    let span_range = span.into_range();
+                    Report::build(ReportKind::Error, (filename.clone(), span_range.clone()))
+                        .with_message(&msg)
+                        .with_label(
+                            Label::new((filename.clone(), span_range))
+                                .with_message(&msg)
+                                .with_color(Color::Red),
+                        )
+                        .finish()
+                        .print(sources([(filename.clone(), src.as_str())]))
+                        .unwrap();
+                } else {
+                    println!("{}", value.to_value().to_pretty_string());
+                }
+            }
             Err(err) => {
                 use chumsky::error::LabelError;
                 let mut e = Rich::custom(err.span, err.msg.clone());

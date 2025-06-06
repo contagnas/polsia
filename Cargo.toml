@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 chumsky = "0.10.1"
 ariadne = "0.5.1"
+serde_json = "1.0"

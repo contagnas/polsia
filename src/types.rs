@@ -1,4 +1,5 @@
 use chumsky::span::SimpleSpan;
+use serde_json::{Map, Number, Value as JsValue};
 
 pub type Span = SimpleSpan<usize>;
 
@@ -45,6 +46,28 @@ impl SpannedValue {
             ),
             ValueKind::Type(t) => Value::Type(t.clone()),
         }
+    }
+}
+
+impl Value {
+    pub fn to_value(&self) -> JsValue {
+        match self {
+            Value::Null => JsValue::Null,
+            Value::Bool(b) => JsValue::Bool(*b),
+            Value::Number(n) => JsValue::Number(Number::from_f64(*n).unwrap()),
+            Value::String(s) => JsValue::String(s.clone()),
+            Value::Array(arr) => JsValue::Array(arr.iter().map(|v| v.to_value()).collect()),
+            Value::Object(obj) => {
+                let map: Map<String, JsValue> =
+                    obj.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
+                JsValue::Object(map)
+            }
+            Value::Type(t) => panic!("unresolved type {:?}", t),
+        }
+    }
+
+    pub fn to_pretty_string(&self) -> String {
+        serde_json::to_string_pretty(&self.to_value()).unwrap()
     }
 }
 
