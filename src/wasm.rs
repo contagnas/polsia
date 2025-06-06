@@ -1,4 +1,5 @@
 use crate::{parser, unify_tree};
+use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]

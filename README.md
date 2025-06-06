@@ -53,4 +53,5 @@ Build the WebAssembly package using [wasm-pack](https://github.com/rustwasm/wasm
 wasm-pack build --target web --release -- --features wasm
 ```
 
-Open `index.html` in a browser to try the playground.
+Run a local web server (e.g. `python3 -m http.server`) and open
+`http://localhost:8000/index.html` to try the playground.

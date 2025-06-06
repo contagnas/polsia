@@ -15,7 +15,7 @@ pre { flex: 1; margin: 0; padding: 10px; overflow: auto; background:#f0f0f0; }
 <script type="module">
 import init, { polsia_to_json } from './pkg/polsia.js';
 async function run() {
-  await init();
+  await init('./pkg/polsia_bg.wasm');
   const input = document.getElementById('input');
   const output = document.getElementById('output');
   function update() {
