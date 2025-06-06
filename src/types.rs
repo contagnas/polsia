@@ -3,51 +3,53 @@ use chumsky::span::SimpleSpan;
 pub type Span = SimpleSpan<usize>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Json {
+pub enum Value {
     Null,
     Bool(bool),
     Number(f64),
     String(String),
-    Array(Vec<Json>),
-    Object(Vec<(String, Json)>),
-    Type(JsonType),
+    Array(Vec<Value>),
+    Object(Vec<(String, Value)>),
+    Type(ValType),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SpannedJson {
+pub struct SpannedValue {
     pub span: Span,
-    pub kind: SpannedKind,
+    pub kind: ValueKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SpannedKind {
+pub enum ValueKind {
     Null,
     Bool(bool),
     Number(f64),
     String(String),
-    Array(Vec<SpannedJson>),
-    Object(Vec<(String, SpannedJson, Span)>),
-    Type(JsonType),
+    Array(Vec<SpannedValue>),
+    Object(Vec<(String, SpannedValue, Span)>),
+    Type(ValType),
 }
 
-impl SpannedJson {
-    pub fn to_json(&self) -> Json {
+impl SpannedValue {
+    pub fn to_value(&self) -> Value {
         match &self.kind {
-            SpannedKind::Null => Json::Null,
-            SpannedKind::Bool(b) => Json::Bool(*b),
-            SpannedKind::Number(n) => Json::Number(*n),
-            SpannedKind::String(s) => Json::String(s.clone()),
-            SpannedKind::Array(a) => Json::Array(a.iter().map(|j| j.to_json()).collect()),
-            SpannedKind::Object(m) => {
-                Json::Object(m.iter().map(|(k, v, _)| (k.clone(), v.to_json())).collect())
-            }
-            SpannedKind::Type(t) => Json::Type(t.clone()),
+            ValueKind::Null => Value::Null,
+            ValueKind::Bool(b) => Value::Bool(*b),
+            ValueKind::Number(n) => Value::Number(*n),
+            ValueKind::String(s) => Value::String(s.clone()),
+            ValueKind::Array(a) => Value::Array(a.iter().map(|j| j.to_value()).collect()),
+            ValueKind::Object(m) => Value::Object(
+                m.iter()
+                    .map(|(k, v, _)| (k.clone(), v.to_value()))
+                    .collect(),
+            ),
+            ValueKind::Type(t) => Value::Type(t.clone()),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum JsonType {
+pub enum ValType {
     Any,
     Nothing,
     Int,

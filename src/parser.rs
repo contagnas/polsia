@@ -1,8 +1,8 @@
-use crate::types::{JsonType, Span, SpannedJson, SpannedKind};
+use crate::types::{Span, SpannedValue, ValType, ValueKind};
 use chumsky::prelude::*;
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 
-pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
+pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
     let value = spanned_value();
 
     let comment = just('#')
@@ -46,7 +46,7 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a,
     let member = key_span
         .then_ignore(just(':').padded_by(ws))
         .then(spanned_value_no_pad())
-        .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
+        .map(|((k, k_span), mut v): ((String, Span), SpannedValue)| {
             let span = SimpleSpan::new((), k_span.start()..v.span.end());
             v.span = span;
             (k, v, span)
@@ -59,15 +59,15 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a,
         .at_least(1)
         .collect::<Vec<_>>()
         .map(|members| members)
-        .map_with(|members, e| SpannedJson {
+        .map_with(|members, e| SpannedValue {
             span: e.span(),
-            kind: SpannedKind::Object(members),
+            kind: ValueKind::Object(members),
         });
 
     choice((top_object, value)).padded_by(ws).map(|v| v)
 }
 
-fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
+fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
     spanned_value_no_pad().padded_by(
         choice((
             text::whitespace().at_least(1).ignored(),
@@ -81,7 +81,8 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<
     )
 }
 
-fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
+fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>>
+{
     recursive(|value| {
         let comment = just('#')
             .then(none_of('\n').repeated())
@@ -108,9 +109,9 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
                     .or_not(),
             )
             .to_slice()
-            .map_with(|s: &str, e| SpannedJson {
+            .map_with(|s: &str, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Number(s.parse().unwrap()),
+                kind: ValueKind::Number(s.parse().unwrap()),
             });
 
         let escape = just('\\').ignore_then(choice((
@@ -132,9 +133,9 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .repeated()
             .collect::<String>()
             .delimited_by(just('"'), just('"'))
-            .map_with(|s: String, e| SpannedJson {
+            .map_with(|s: String, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::String(s),
+                kind: ValueKind::String(s),
             });
 
         let array = value
@@ -143,14 +144,14 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .allow_trailing()
             .collect()
             .delimited_by(just('[').padded_by(ws), ws.then_ignore(just(']')))
-            .map_with(|vals, e| SpannedJson {
+            .map_with(|vals, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Array(vals),
+                kind: ValueKind::Array(vals),
             });
 
         let key_string = string.map(|j| {
-            if let SpannedJson {
-                kind: SpannedKind::String(s),
+            if let SpannedValue {
+                kind: ValueKind::String(s),
                 ..
             } = j
             {
@@ -166,7 +167,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
         let member = key_span
             .then_ignore(just(':').padded_by(ws))
             .then(value.clone())
-            .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
+            .map(|((k, k_span), mut v): ((String, Span), SpannedValue)| {
                 let span = SimpleSpan::new((), k_span.start()..v.span.end());
                 v.span = span;
                 (k, v, span)
@@ -177,9 +178,9 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .allow_trailing()
             .collect::<Vec<_>>()
             .delimited_by(just('{').padded_by(ws), ws.then_ignore(just('}')))
-            .map_with(|members, e| SpannedJson {
+            .map_with(|members, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Object(members),
+                kind: ValueKind::Object(members),
             });
 
         let chain = key_span
@@ -191,54 +192,54 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .map(|(keys, mut v)| {
                 for (k, k_span) in keys.into_iter().rev() {
                     let span = SimpleSpan::new((), k_span.start()..v.span.end());
-                    v = SpannedJson {
+                    v = SpannedValue {
                         span,
-                        kind: SpannedKind::Object(vec![(k, v, span)]),
+                        kind: ValueKind::Object(vec![(k, v, span)]),
                     };
                 }
                 v
             });
 
         choice((
-            just("null").map_with(|_, e| SpannedJson {
+            just("null").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Null,
+                kind: ValueKind::Null,
             }),
-            just("true").map_with(|_, e| SpannedJson {
+            just("true").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Bool(true),
+                kind: ValueKind::Bool(true),
             }),
-            just("false").map_with(|_, e| SpannedJson {
+            just("false").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Bool(false),
+                kind: ValueKind::Bool(false),
             }),
-            just("Any").map_with(|_, e| SpannedJson {
+            just("Any").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::Any),
+                kind: ValueKind::Type(ValType::Any),
             }),
-            just("Nothing").map_with(|_, e| SpannedJson {
+            just("Nothing").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::Nothing),
+                kind: ValueKind::Type(ValType::Nothing),
             }),
-            just("Int").map_with(|_, e| SpannedJson {
+            just("Int").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::Int),
+                kind: ValueKind::Type(ValType::Int),
             }),
-            just("Number").map_with(|_, e| SpannedJson {
+            just("Number").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::Number),
+                kind: ValueKind::Type(ValType::Number),
             }),
-            just("Rational").map_with(|_, e| SpannedJson {
+            just("Rational").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::Rational),
+                kind: ValueKind::Type(ValType::Rational),
             }),
-            just("Float").map_with(|_, e| SpannedJson {
+            just("Float").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::Float),
+                kind: ValueKind::Type(ValType::Float),
             }),
-            just("String").map_with(|_, e| SpannedJson {
+            just("String").map_with(|_, e| SpannedValue {
                 span: e.span(),
-                kind: SpannedKind::Type(JsonType::String),
+                kind: ValueKind::Type(ValType::String),
             }),
             number,
             string,

@@ -1,6 +1,6 @@
-use aislop::{parser, unify_tree};
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
+use polsia::{parser, unify_tree};
 use std::{env, fs};
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
     let parse_result = parser().parse(&src).into_result();
     match parse_result {
         Ok(ast) => match unify_tree(&ast) {
-            Ok(json) => println!("{:#?}", json.to_json()),
+            Ok(value) => println!("{:#?}", value.to_value()),
             Err(err) => {
                 use chumsky::error::LabelError;
                 let mut e = Rich::custom(err.span, err.msg.clone());

@@ -1,4 +1,4 @@
-use crate::types::{Json, JsonType, Span, SpannedJson, SpannedKind};
+use crate::types::{Span, SpannedValue, ValType, Value, ValueKind};
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 
 #[derive(Debug)]
@@ -8,46 +8,46 @@ pub struct UnifyError {
     pub prev_span: Span,
 }
 
-fn type_name(t: &JsonType) -> &'static str {
+fn type_name(t: &ValType) -> &'static str {
     match t {
-        JsonType::Any => "Any",
-        JsonType::Nothing => "Nothing",
-        JsonType::Int => "Int",
-        JsonType::Number => "Number",
-        JsonType::Rational => "Rational",
-        JsonType::Float => "Float",
-        JsonType::String => "String",
+        ValType::Any => "Any",
+        ValType::Nothing => "Nothing",
+        ValType::Int => "Int",
+        ValType::Number => "Number",
+        ValType::Rational => "Rational",
+        ValType::Float => "Float",
+        ValType::String => "String",
     }
 }
 
-fn unify_types(a: &JsonType, b: &JsonType) -> Result<JsonType, String> {
+fn unify_types(a: &ValType, b: &ValType) -> Result<ValType, String> {
     if a == b {
         return Ok(a.clone());
     }
-    if matches!(a, JsonType::Any) {
+    if matches!(a, ValType::Any) {
         return Ok(b.clone());
     }
-    if matches!(b, JsonType::Any) {
+    if matches!(b, ValType::Any) {
         return Ok(a.clone());
     }
-    if matches!(a, JsonType::Nothing) || matches!(b, JsonType::Nothing) {
+    if matches!(a, ValType::Nothing) || matches!(b, ValType::Nothing) {
         return Err("cannot unify Nothing".into());
     }
-    let rank = |t: &JsonType| match t {
-        JsonType::Int => Some(0),
-        JsonType::Rational => Some(1),
-        JsonType::Float => Some(2),
-        JsonType::Number => Some(3),
+    let rank = |t: &ValType| match t {
+        ValType::Int => Some(0),
+        ValType::Rational => Some(1),
+        ValType::Float => Some(2),
+        ValType::Number => Some(3),
         _ => None,
     };
     match (rank(a), rank(b)) {
         (Some(ra), Some(rb)) => {
             let r = ra.max(rb);
             Ok(match r {
-                0 => JsonType::Int,
-                1 => JsonType::Rational,
-                2 => JsonType::Float,
-                _ => JsonType::Number,
+                0 => ValType::Int,
+                1 => ValType::Rational,
+                2 => ValType::Float,
+                _ => ValType::Number,
             })
         }
         _ => Err(format!(
@@ -58,29 +58,29 @@ fn unify_types(a: &JsonType, b: &JsonType) -> Result<JsonType, String> {
     }
 }
 
-fn unify_type_value(t: &JsonType, val: &Json) -> Result<Json, String> {
+fn unify_type_value(t: &ValType, val: &Value) -> Result<Value, String> {
     match t {
-        JsonType::Any => Ok(val.clone()),
-        JsonType::Nothing => Err("cannot unify Nothing".into()),
-        JsonType::Int => match val {
-            Json::Number(n) if n.fract() == 0.0 => Ok(Json::Number(*n)),
-            Json::Type(other) => unify_types(t, other).map(Json::Type),
+        ValType::Any => Ok(val.clone()),
+        ValType::Nothing => Err("cannot unify Nothing".into()),
+        ValType::Int => match val {
+            Value::Number(n) if n.fract() == 0.0 => Ok(Value::Number(*n)),
+            Value::Type(other) => unify_types(t, other).map(Value::Type),
             _ => Err("expected integer".into()),
         },
-        JsonType::Rational | JsonType::Float | JsonType::Number => match val {
-            Json::Number(n) => Ok(Json::Number(*n)),
-            Json::Type(other) => unify_types(t, other).map(Json::Type),
+        ValType::Rational | ValType::Float | ValType::Number => match val {
+            Value::Number(n) => Ok(Value::Number(*n)),
+            Value::Type(other) => unify_types(t, other).map(Value::Type),
             _ => Err("expected number".into()),
         },
-        JsonType::String => match val {
-            Json::String(s) => Ok(Json::String(s.clone())),
-            Json::Type(other) => unify_types(t, other).map(Json::Type),
+        ValType::String => match val {
+            Value::String(s) => Ok(Value::String(s.clone())),
+            Value::Type(other) => unify_types(t, other).map(Value::Type),
             _ => Err("expected string".into()),
         },
     }
 }
 
-pub fn unify(a: &Json, b: &Json) -> Result<Json, String> {
+pub fn unify(a: &Value, b: &Value) -> Result<Value, String> {
     unify_with_path(a, b, "")
 }
 
@@ -93,18 +93,18 @@ fn add_path(path: &str, msg: String) -> String {
 }
 
 pub fn unify_spanned(
-    a: &SpannedJson,
-    b: &SpannedJson,
+    a: &SpannedValue,
+    b: &SpannedValue,
     path: &str,
-) -> Result<SpannedJson, UnifyError> {
-    if a.to_json() == b.to_json() {
+) -> Result<SpannedValue, UnifyError> {
+    if a.to_value() == b.to_value() {
         return Ok(b.clone());
     }
     match (&a.kind, &b.kind) {
-        (SpannedKind::Type(ta), SpannedKind::Type(tb)) => match unify_types(ta, tb) {
-            Ok(t) => Ok(SpannedJson {
+        (ValueKind::Type(ta), ValueKind::Type(tb)) => match unify_types(ta, tb) {
+            Ok(t) => Ok(SpannedValue {
                 span: b.span,
-                kind: SpannedKind::Type(t),
+                kind: ValueKind::Type(t),
             }),
             Err(e) => Err(UnifyError {
                 msg: add_path(path, e),
@@ -112,10 +112,10 @@ pub fn unify_spanned(
                 prev_span: a.span,
             }),
         },
-        (SpannedKind::Type(t), other) => match unify_type_value(t, &spkind_to_json(other)) {
-            Ok(j) => Ok(SpannedJson {
+        (ValueKind::Type(t), other) => match unify_type_value(t, &kind_to_value(other)) {
+            Ok(j) => Ok(SpannedValue {
                 span: b.span,
-                kind: json_to_spkind(j),
+                kind: value_to_kind(j),
             }),
             Err(e) => Err(UnifyError {
                 msg: add_path(path, e),
@@ -123,10 +123,10 @@ pub fn unify_spanned(
                 prev_span: a.span,
             }),
         },
-        (other, SpannedKind::Type(t)) => match unify_type_value(t, &spkind_to_json(other)) {
-            Ok(j) => Ok(SpannedJson {
+        (other, ValueKind::Type(t)) => match unify_type_value(t, &kind_to_value(other)) {
+            Ok(j) => Ok(SpannedValue {
                 span: a.span,
-                kind: json_to_spkind(j),
+                kind: value_to_kind(j),
             }),
             Err(e) => Err(UnifyError {
                 msg: add_path(path, e),
@@ -134,9 +134,9 @@ pub fn unify_spanned(
                 prev_span: a.span,
             }),
         },
-        (SpannedKind::Object(a_members), SpannedKind::Object(b_members)) => {
+        (ValueKind::Object(a_members), ValueKind::Object(b_members)) => {
             use std::collections::BTreeMap;
-            let mut map: BTreeMap<String, SpannedJson> = BTreeMap::new();
+            let mut map: BTreeMap<String, SpannedValue> = BTreeMap::new();
             for (k, v, _) in a_members {
                 map.insert(k.clone(), v.clone());
             }
@@ -157,9 +157,9 @@ pub fn unify_spanned(
                 }
             }
             let members = map.into_iter().collect::<Vec<_>>();
-            Ok(SpannedJson {
+            Ok(SpannedValue {
                 span: b.span,
-                kind: SpannedKind::Object(
+                kind: ValueKind::Object(
                     members
                         .into_iter()
                         .map(|(k, v)| {
@@ -178,22 +178,22 @@ pub fn unify_spanned(
     }
 }
 
-fn unify_tree_inner(value: &SpannedJson, path: &str) -> Result<SpannedJson, UnifyError> {
+fn unify_tree_inner(value: &SpannedValue, path: &str) -> Result<SpannedValue, UnifyError> {
     match &value.kind {
-        SpannedKind::Array(items) => {
+        ValueKind::Array(items) => {
             let mut out = Vec::new();
             for item in items {
                 out.push(unify_tree_inner(item, path)?);
             }
-            Ok(SpannedJson {
+            Ok(SpannedValue {
                 span: value.span,
-                kind: SpannedKind::Array(out),
+                kind: ValueKind::Array(out),
             })
         }
-        SpannedKind::Object(members) => {
+        ValueKind::Object(members) => {
             use std::collections::HashMap;
-            let mut seen: HashMap<String, SpannedJson> = HashMap::new();
-            let mut out: Vec<(String, SpannedJson, Span)> = Vec::new();
+            let mut seen: HashMap<String, SpannedValue> = HashMap::new();
+            let mut out: Vec<(String, SpannedValue, Span)> = Vec::new();
             for (k, v, span) in members {
                 let new_path = if path.is_empty() {
                     k.clone()
@@ -209,81 +209,81 @@ fn unify_tree_inner(value: &SpannedJson, path: &str) -> Result<SpannedJson, Unif
                 }
                 out.push((k.clone(), unified_v, *span));
             }
-            Ok(SpannedJson {
+            Ok(SpannedValue {
                 span: value.span,
-                kind: SpannedKind::Object(out),
+                kind: ValueKind::Object(out),
             })
         }
         _ => Ok(value.clone()),
     }
 }
 
-pub fn unify_tree(value: &SpannedJson) -> Result<SpannedJson, UnifyError> {
+pub fn unify_tree(value: &SpannedValue) -> Result<SpannedValue, UnifyError> {
     unify_tree_inner(value, "")
 }
 
-fn json_to_spkind(j: Json) -> SpannedKind {
+fn value_to_kind(j: Value) -> ValueKind {
     match j {
-        Json::Null => SpannedKind::Null,
-        Json::Bool(b) => SpannedKind::Bool(b),
-        Json::Number(n) => SpannedKind::Number(n),
-        Json::String(s) => SpannedKind::String(s),
-        Json::Array(arr) => SpannedKind::Array(
+        Value::Null => ValueKind::Null,
+        Value::Bool(b) => ValueKind::Bool(b),
+        Value::Number(n) => ValueKind::Number(n),
+        Value::String(s) => ValueKind::String(s),
+        Value::Array(arr) => ValueKind::Array(
             arr.into_iter()
-                .map(|v| SpannedJson {
+                .map(|v| SpannedValue {
                     span: SimpleSpan::new((), 0..0),
-                    kind: json_to_spkind(v),
+                    kind: value_to_kind(v),
                 })
                 .collect(),
         ),
-        Json::Object(obj) => SpannedKind::Object(
+        Value::Object(obj) => ValueKind::Object(
             obj.into_iter()
                 .map(|(k, v)| {
                     (
                         k,
-                        SpannedJson {
+                        SpannedValue {
                             span: SimpleSpan::new((), 0..0),
-                            kind: json_to_spkind(v),
+                            kind: value_to_kind(v),
                         },
                         SimpleSpan::new((), 0..0),
                     )
                 })
                 .collect(),
         ),
-        Json::Type(t) => SpannedKind::Type(t),
+        Value::Type(t) => ValueKind::Type(t),
     }
 }
 
-fn spkind_to_json(k: &SpannedKind) -> Json {
+fn kind_to_value(k: &ValueKind) -> Value {
     match k {
-        SpannedKind::Null => Json::Null,
-        SpannedKind::Bool(b) => Json::Bool(*b),
-        SpannedKind::Number(n) => Json::Number(*n),
-        SpannedKind::String(s) => Json::String(s.clone()),
-        SpannedKind::Array(arr) => Json::Array(arr.iter().map(|v| v.to_json()).collect()),
-        SpannedKind::Object(obj) => Json::Object(
+        ValueKind::Null => Value::Null,
+        ValueKind::Bool(b) => Value::Bool(*b),
+        ValueKind::Number(n) => Value::Number(*n),
+        ValueKind::String(s) => Value::String(s.clone()),
+        ValueKind::Array(arr) => Value::Array(arr.iter().map(|v| v.to_value()).collect()),
+        ValueKind::Object(obj) => Value::Object(
             obj.iter()
-                .map(|(k, v, _)| (k.clone(), v.to_json()))
+                .map(|(k, v, _)| (k.clone(), v.to_value()))
                 .collect(),
         ),
-        SpannedKind::Type(t) => Json::Type(t.clone()),
+        ValueKind::Type(t) => Value::Type(t.clone()),
     }
 }
 
-pub fn unify_with_path(a: &Json, b: &Json, path: &str) -> Result<Json, String> {
+pub fn unify_with_path(a: &Value, b: &Value, path: &str) -> Result<Value, String> {
     if a == b {
         return Ok(a.clone());
     }
     match (a, b) {
-        (Json::Type(ta), Json::Type(tb)) => unify_types(ta, tb)
-            .map(Json::Type)
+        (Value::Type(ta), Value::Type(tb)) => unify_types(ta, tb)
+            .map(Value::Type)
             .map_err(|e| add_path(path, e)),
-        (Json::Type(t), val) | (val, Json::Type(t)) => {
+        (Value::Type(t), val) | (val, Value::Type(t)) => {
             unify_type_value(t, val).map_err(|e| add_path(path, e))
         }
-        (Json::Object(a_members), Json::Object(b_members)) => {
+        (Value::Object(a_members), Value::Object(b_members)) => {
             use std::collections::BTreeMap;
-            let mut map: BTreeMap<String, Json> = BTreeMap::new();
+            let mut map: BTreeMap<String, Value> = BTreeMap::new();
             for (k, v) in a_members {
                 map.insert(k.clone(), v.clone());
             }
@@ -303,7 +303,7 @@ pub fn unify_with_path(a: &Json, b: &Json, path: &str) -> Result<Json, String> {
                     }
                 }
             }
-            Ok(Json::Object(map.into_iter().collect()))
+            Ok(Value::Object(map.into_iter().collect()))
         }
         _ => Err(add_path(path, "values do not unify".into())),
     }

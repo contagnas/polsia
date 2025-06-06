@@ -1,26 +1,46 @@
-# Aislop
+# Polsia
 
-Aislop is a small experimental JSON parser written in Rust using the [chumsky](https://github.com/zesterer/chumsky) parser combinator library.
+Polsia is a small experimental data language parser written in Rust using the [chumsky](https://github.com/zesterer/chumsky) parser combinator library.
 
-Features include:
-- Comments starting with `#`
-- Trailing commas in arrays and objects
-- Unquoted identifiers as object keys
+## Language features
+
+- `#` comments
+- trailing commas in arrays and objects
+- unquoted identifiers as keys
+- optional commas and braces for single objects
+- chained keys like `foo: bar: 1` for nested objects
+- basic type annotations (`Int`, `Float`, `String`, `Any`, `Nothing`)
+
+## Examples
+
+```polsia
+# simple object without braces
+foo: 1
+bar: [1, 2, 3,]
+```
+
+```polsia
+# using types and chains
+person: {
+  name: String,
+}
+person: name: "Jane"
+```
 
 ## Building
 
 Use Cargo to build and run:
 
 ```bash
-cargo run <path-to-json-file>
+cargo run <path-to-file>
 ```
 
 ## Testing
 
-Run the formatter and tests:
+Run the formatter, lints and tests:
 
 ```bash
 cargo fmt -- --check
+cargo clippy -- -D warnings
 cargo test
 ```
-

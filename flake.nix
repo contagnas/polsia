@@ -1,5 +1,5 @@
 {
-  description = "aislop development environment";
+  description = "polsia development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

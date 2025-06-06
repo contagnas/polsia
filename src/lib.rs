@@ -3,7 +3,7 @@ pub mod types;
 pub mod unify;
 
 pub use parser::parser;
-pub use types::{Json, JsonType, SpannedJson, SpannedKind};
+pub use types::{SpannedValue, ValType, Value, ValueKind};
 pub use unify::{UnifyError, unify, unify_spanned, unify_tree, unify_with_path};
 
 #[cfg(test)]
@@ -23,11 +23,11 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
-            unified.to_json(),
-            Json::Array(vec![
-                Json::Number(1.0),
-                Json::Number(2.0),
-                Json::Number(3.0)
+            unified.to_value(),
+            Value::Array(vec![
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Number(3.0)
             ])
         );
     }
@@ -44,10 +44,10 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
-            unified.to_json(),
-            Json::Object(vec![
-                ("a".into(), Json::Bool(true)),
-                ("b".into(), Json::Array(vec![Json::Bool(false)])),
+            unified.to_value(),
+            Value::Object(vec![
+                ("a".into(), Value::Bool(true)),
+                ("b".into(), Value::Array(vec![Value::Bool(false)])),
             ])
         );
     }
@@ -63,12 +63,12 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
-            unified.to_json(),
-            Json::Object(vec![
-                ("a".into(), Json::Number(1.0)),
+            unified.to_value(),
+            Value::Object(vec![
+                ("a".into(), Value::Number(1.0)),
                 (
                     "b".into(),
-                    Json::Object(vec![("c".into(), Json::Number(2.0))]),
+                    Value::Object(vec![("c".into(), Value::Number(2.0))]),
                 ),
             ])
         );
@@ -80,10 +80,10 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
-            unified.to_json(),
-            Json::Object(vec![
-                ("a".into(), Json::Number(1.0)),
-                ("a".into(), Json::Number(1.0)),
+            unified.to_value(),
+            Value::Object(vec![
+                ("a".into(), Value::Number(1.0)),
+                ("a".into(), Value::Number(1.0)),
             ])
         );
     }
@@ -163,20 +163,20 @@ mod tests {
 
     #[test]
     fn unify_object_union_of_keys() {
-        let a = Json::Object(vec![(
+        let a = Value::Object(vec![(
             "foo".into(),
-            Json::Object(vec![("bar".into(), Json::Number(1.0))]),
+            Value::Object(vec![("bar".into(), Value::Number(1.0))]),
         )]);
-        let b = Json::Object(vec![(
+        let b = Value::Object(vec![(
             "foo".into(),
-            Json::Object(vec![("baz".into(), Json::Number(2.0))]),
+            Value::Object(vec![("baz".into(), Value::Number(2.0))]),
         )]);
         let unified = unify(&a, &b).unwrap();
-        let expected = Json::Object(vec![(
+        let expected = Value::Object(vec![(
             "foo".into(),
-            Json::Object(vec![
-                ("bar".into(), Json::Number(1.0)),
-                ("baz".into(), Json::Number(2.0)),
+            Value::Object(vec![
+                ("bar".into(), Value::Number(1.0)),
+                ("baz".into(), Value::Number(2.0)),
             ]),
         )]);
         assert_eq!(unified, expected);
@@ -258,7 +258,7 @@ mod tests {
         let a = unify_tree(&a).unwrap();
         let b = parser().parse(without_braces).into_result().unwrap();
         let b = unify_tree(&b).unwrap();
-        assert_eq!(a.to_json(), b.to_json());
+        assert_eq!(a.to_value(), b.to_value());
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
         let expected = unify_tree(&expected).unwrap();
         let parsed = parser().parse(src).into_result().unwrap();
         let parsed = unify_tree(&parsed).unwrap();
-        assert_eq!(parsed.to_json(), expected.to_json());
+        assert_eq!(parsed.to_value(), expected.to_value());
     }
 
     #[test]
@@ -282,7 +282,7 @@ mod tests {
         let a = unify_tree(&a).unwrap();
         let b = parser().parse(without_commas).into_result().unwrap();
         let b = unify_tree(&b).unwrap();
-        assert_eq!(a.to_json(), b.to_json());
+        assert_eq!(a.to_value(), b.to_value());
     }
 
     #[test]
