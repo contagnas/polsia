@@ -447,7 +447,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
         let digits = text::digits(10);
         let int = text::int(10);
 
-        let value_padded = value.clone().padded_by(ws.clone());
+
 
         let number = just('-')
             .or_not()
@@ -489,14 +489,14 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
                 kind: SpannedKind::String(s),
             });
 
-        let array = value_padded
+        let array = value
             .clone()
             .separated_by(just(',').padded_by(ws.clone()))
             .allow_trailing()
             .collect()
             .delimited_by(
                 just('[').padded_by(ws.clone()),
-                just(']').padded_by(ws.clone()),
+                ws.clone().then_ignore(just(']')),
             )
             .map_with(|vals, e| SpannedJson {
                 span: e.span(),
@@ -520,7 +520,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
 
         let member = key_span
             .then_ignore(just(':').padded_by(ws.clone()))
-            .then(value_padded.clone())
+            .then(value.clone())
             .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
                 let span = SimpleSpan::new((), k_span.start()..v.span.end());
                 v.span = span;
@@ -533,7 +533,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .collect::<Vec<_>>()
             .delimited_by(
                 just('{').padded_by(ws.clone()),
-                just('}').padded_by(ws.clone()),
+                ws.clone().then_ignore(just('}')),
             )
             .validate(|members: Vec<(String, SpannedJson, Span)>, _extra, emit| {
                 use chumsky::error::LabelError;
@@ -582,7 +582,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .repeated()
             .at_least(1)
             .collect::<Vec<_>>()
-            .then(value_padded.clone())
+            .then(value.clone())
             .map(|(keys, mut v)| {
                 for (k, k_span) in keys.into_iter().rev() {
                     let span = SimpleSpan::new((), k_span.start()..v.span.end());
@@ -920,5 +920,11 @@ mod tests {
         let a = parser().parse(with_commas).into_result().unwrap();
         let b = parser().parse(without_commas).into_result().unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn chain_with_duplicate_keys_no_commas() {
+        let src = "foo: bar: 1\nfoo: baz: 2\n";
+        assert!(parser().parse(src).into_result().is_ok());
     }
 }
