@@ -16,6 +16,45 @@ enum Json {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+struct SpannedJson {
+    span: Span,
+    kind: SpannedKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum SpannedKind {
+    Null,
+    Bool(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<SpannedJson>),
+    Object(Vec<(String, SpannedJson, Span)>),
+    Type(JsonType),
+}
+
+impl SpannedJson {
+    fn to_json(&self) -> Json {
+        match &self.kind {
+            SpannedKind::Null => Json::Null,
+            SpannedKind::Bool(b) => Json::Bool(*b),
+            SpannedKind::Number(n) => Json::Number(*n),
+            SpannedKind::String(s) => Json::String(s.clone()),
+            SpannedKind::Array(a) => Json::Array(a.iter().map(|j| j.to_json()).collect()),
+            SpannedKind::Object(m) => {
+                Json::Object(m.iter().map(|(k, v, _)| (k.clone(), v.to_json())).collect())
+            }
+            SpannedKind::Type(t) => Json::Type(t.clone()),
+        }
+    }
+}
+
+struct UnifyError {
+    msg: String,
+    span: Span,
+    prev_span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum JsonType {
     Any,
     Nothing,
@@ -110,6 +149,136 @@ fn add_path(path: &str, msg: String) -> String {
     }
 }
 
+fn unify_spanned(a: &SpannedJson, b: &SpannedJson, path: &str) -> Result<SpannedJson, UnifyError> {
+    if a.to_json() == b.to_json() {
+        return Ok(b.clone());
+    }
+    match (&a.kind, &b.kind) {
+        (SpannedKind::Type(ta), SpannedKind::Type(tb)) => match unify_types(ta, tb) {
+            Ok(t) => Ok(SpannedJson {
+                span: b.span,
+                kind: SpannedKind::Type(t),
+            }),
+            Err(e) => Err(UnifyError {
+                msg: add_path(path, e),
+                span: b.span,
+                prev_span: a.span,
+            }),
+        },
+        (SpannedKind::Type(t), other) => match unify_type_value(t, &spkind_to_json(other)) {
+            Ok(j) => Ok(SpannedJson {
+                span: b.span,
+                kind: json_to_spkind(j),
+            }),
+            Err(e) => Err(UnifyError {
+                msg: add_path(path, e),
+                span: b.span,
+                prev_span: a.span,
+            }),
+        },
+        (other, SpannedKind::Type(t)) => match unify_type_value(t, &spkind_to_json(other)) {
+            Ok(j) => Ok(SpannedJson {
+                span: a.span,
+                kind: json_to_spkind(j),
+            }),
+            Err(e) => Err(UnifyError {
+                msg: add_path(path, e),
+                span: b.span,
+                prev_span: a.span,
+            }),
+        },
+        (SpannedKind::Object(a_members), SpannedKind::Object(b_members)) => {
+            use std::collections::BTreeMap;
+            let mut map: BTreeMap<String, SpannedJson> = BTreeMap::new();
+            for (k, v, _) in a_members {
+                map.insert(k.clone(), v.clone());
+            }
+            for (k, v, _) in b_members {
+                match map.get(k) {
+                    Some(prev) => {
+                        let new_path = if path.is_empty() {
+                            k.clone()
+                        } else {
+                            format!("{}.{}", path, k)
+                        };
+                        let unified = unify_spanned(prev, v, &new_path)?;
+                        map.insert(k.clone(), unified);
+                    }
+                    None => {
+                        map.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            let members = map.into_iter().collect::<Vec<_>>();
+            Ok(SpannedJson {
+                span: b.span,
+                kind: SpannedKind::Object(
+                    members
+                        .into_iter()
+                        .map(|(k, v)| {
+                            let span = v.span;
+                            (k, v, span)
+                        })
+                        .collect(),
+                ),
+            })
+        }
+        _ => Err(UnifyError {
+            msg: add_path(path, "values do not unify".into()),
+            span: b.span,
+            prev_span: a.span,
+        }),
+    }
+}
+
+fn json_to_spkind(j: Json) -> SpannedKind {
+    match j {
+        Json::Null => SpannedKind::Null,
+        Json::Bool(b) => SpannedKind::Bool(b),
+        Json::Number(n) => SpannedKind::Number(n),
+        Json::String(s) => SpannedKind::String(s),
+        Json::Array(arr) => SpannedKind::Array(
+            arr.into_iter()
+                .map(|v| SpannedJson {
+                    span: SimpleSpan::new((), 0..0),
+                    kind: json_to_spkind(v),
+                })
+                .collect(),
+        ),
+        Json::Object(obj) => SpannedKind::Object(
+            obj.into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        SpannedJson {
+                            span: SimpleSpan::new((), 0..0),
+                            kind: json_to_spkind(v),
+                        },
+                        SimpleSpan::new((), 0..0),
+                    )
+                })
+                .collect(),
+        ),
+        Json::Type(t) => SpannedKind::Type(t),
+    }
+}
+
+fn spkind_to_json(k: &SpannedKind) -> Json {
+    match k {
+        SpannedKind::Null => Json::Null,
+        SpannedKind::Bool(b) => Json::Bool(*b),
+        SpannedKind::Number(n) => Json::Number(*n),
+        SpannedKind::String(s) => Json::String(s.clone()),
+        SpannedKind::Array(arr) => Json::Array(arr.iter().map(|v| v.to_json()).collect()),
+        SpannedKind::Object(obj) => Json::Object(
+            obj.iter()
+                .map(|(k, v, _)| (k.clone(), v.to_json()))
+                .collect(),
+        ),
+        SpannedKind::Type(t) => Json::Type(t.clone()),
+    }
+}
+
 fn unify_with_path(a: &Json, b: &Json, path: &str) -> Result<Json, String> {
     if a == b {
         return Ok(a.clone());
@@ -150,6 +319,10 @@ fn unify_with_path(a: &Json, b: &Json, path: &str) -> Result<Json, String> {
 }
 
 fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
+    spanned_value().map(|v| v.to_json())
+}
+
+fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
     recursive(|value| {
         let comment = just('#')
             .then(none_of('\n').repeated())
@@ -172,7 +345,10 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                     .or_not(),
             )
             .to_slice()
-            .map(|s: &str| Json::Number(s.parse().unwrap()));
+            .map_with(|s: &str, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Number(s.parse().unwrap()),
+            });
 
         let escape = just('\\').ignore_then(choice((
             just('\\'),
@@ -193,7 +369,10 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
             .repeated()
             .collect::<String>()
             .delimited_by(just('"'), just('"'))
-            .map(Json::String);
+            .map_with(|s: String, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::String(s),
+            });
 
         let array = value
             .clone()
@@ -204,23 +383,34 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                 just('[').padded_by(ws.clone()),
                 just(']').padded_by(ws.clone()),
             )
-            .map(Json::Array);
+            .map_with(|vals, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Array(vals),
+            });
 
-        let key = string
-            .clone()
-            .map(|j| {
-                if let Json::String(s) = j {
-                    s
-                } else {
-                    unreachable!()
-                }
-            })
-            .or(text::ident().map(|s: &str| s.to_string()));
+        let key_string = string.clone().map(|j| {
+            if let SpannedJson {
+                kind: SpannedKind::String(s),
+                ..
+            } = j
+            {
+                s
+            } else {
+                unreachable!()
+            }
+        });
+        let key = key_string.or(text::ident().map(|s: &str| s.to_string()));
 
-        let member = key
+        let key_span = key.clone().map_with(|k: String, e| (k, e.span()));
+
+        let member = key_span
             .then_ignore(just(':').padded_by(ws.clone()))
-            .then(value.clone().map_with(|v, e| (v, e.span())))
-            .map(|(k, (v, span))| (k, v, span));
+            .then(value.clone())
+            .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
+                let span = SimpleSpan::new((), k_span.start()..v.span.end());
+                v.span = span;
+                (k, v, span)
+            });
         let object = member
             .separated_by(just(',').padded_by(ws.clone()))
             .allow_trailing()
@@ -229,45 +419,87 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                 just('{').padded_by(ws.clone()),
                 just('}').padded_by(ws.clone()),
             )
-            .validate(|members: Vec<(String, Json, Span)>, _extra, emit| {
+            .validate(|members: Vec<(String, SpannedJson, Span)>, _extra, emit| {
                 use chumsky::error::LabelError;
                 use std::collections::hash_map::HashMap;
-                let mut seen: HashMap<&str, (Json, Span)> = HashMap::new();
-                for (k, v, span) in &members {
+                let mut seen: HashMap<String, SpannedJson> = HashMap::new();
+                let mut out: Vec<(String, SpannedJson, Span)> = Vec::new();
+                for (k, v, span) in members {
                     match seen.get(k.as_str()) {
-                        Some((prev, prev_span)) => {
-                            if let Err(msg) = unify_with_path(prev, v, k) {
-                                let mut err = Rich::custom(
-                                    span.clone(),
-                                    format!("duplicate key '{}' could not be unified: {}", k, msg),
+                        Some(prev) => match unify_spanned(prev, &v, &k) {
+                            Ok(_) => {
+                                out.push((k, v, span));
+                            }
+                            Err(err) => {
+                                let mut e = Rich::custom(
+                                    err.span.clone(),
+                                    format!(
+                                        "duplicate key '{}' could not be unified: {}",
+                                        k, err.msg
+                                    ),
                                 );
                                 <Rich<_> as LabelError<&str, _>>::in_context(
-                                    &mut err,
+                                    &mut e,
                                     "previous value here",
-                                    prev_span.clone(),
+                                    err.prev_span.clone(),
                                 );
-                                emit.emit(err);
+                                emit.emit(e);
                             }
-                        }
+                        },
                         None => {
-                            seen.insert(k.as_str(), (v.clone(), span.clone()));
+                            seen.insert(k.clone(), v.clone());
+                            out.push((k, v, span));
                         }
                     }
                 }
-                Json::Object(members.into_iter().map(|(k, v, _)| (k, v)).collect())
+                out
+            })
+            .map_with(|members, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Object(members),
             });
 
         choice((
-            just("null").to(Json::Null),
-            just("true").to(Json::Bool(true)),
-            just("false").to(Json::Bool(false)),
-            just("Any").to(Json::Type(JsonType::Any)),
-            just("Nothing").to(Json::Type(JsonType::Nothing)),
-            just("Int").to(Json::Type(JsonType::Int)),
-            just("Number").to(Json::Type(JsonType::Number)),
-            just("Rational").to(Json::Type(JsonType::Rational)),
-            just("Float").to(Json::Type(JsonType::Float)),
-            just("String").to(Json::Type(JsonType::String)),
+            just("null").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Null,
+            }),
+            just("true").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Bool(true),
+            }),
+            just("false").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Bool(false),
+            }),
+            just("Any").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::Any),
+            }),
+            just("Nothing").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::Nothing),
+            }),
+            just("Int").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::Int),
+            }),
+            just("Number").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::Number),
+            }),
+            just("Rational").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::Rational),
+            }),
+            just("Float").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::Float),
+            }),
+            just("String").map_with(|_, e| SpannedJson {
+                span: e.span(),
+                kind: SpannedKind::Type(JsonType::String),
+            }),
             number,
             string,
             array,
@@ -503,8 +735,13 @@ mod tests {
             Ok(_) => panic!("expected error"),
             Err(errs) => {
                 assert!(!errs.is_empty());
-                let msg = errs[0].to_string();
+                let err = &errs[0];
+                let msg = err.to_string();
                 assert!(msg.contains("bar"));
+                let span = err.span().clone().into_range();
+                let prev_span = err.contexts().next().unwrap().1.into_range();
+                assert!(src[span.start..span.end].contains("bar"));
+                assert!(src[prev_span.start..prev_span.end].contains("bar"));
             }
         }
     }
