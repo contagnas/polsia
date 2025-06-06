@@ -13,6 +13,13 @@ enum Json {
 
 fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Simple<'a, char>>> {
     recursive(|value| {
+        let comment = just('#')
+            .then(none_of('\n').repeated())
+            .then_ignore(text::newline().or_not())
+            .ignored();
+        let ws = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+            .repeated()
+            .ignored();
         let digits = text::digits(10);
         let int = text::int(10);
 
@@ -48,22 +55,22 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Simple<'a, char>>> 
 
         let array = value
             .clone()
-            .separated_by(just(',').padded())
+            .separated_by(just(',').padded_by(ws.clone()))
             .allow_trailing()
             .collect()
-            .delimited_by(just('[').padded(), just(']').padded())
+            .delimited_by(just('[').padded_by(ws.clone()), just(']').padded_by(ws.clone()))
             .map(Json::Array);
 
         let member = string
             .clone()
             .map(|j| if let Json::String(s) = j { s } else { unreachable!() })
-            .then_ignore(just(':').padded())
+            .then_ignore(just(':').padded_by(ws.clone()))
             .then(value.clone());
         let object = member
-            .separated_by(just(',').padded())
+            .separated_by(just(',').padded_by(ws.clone()))
             .allow_trailing()
             .collect::<Vec<_>>()
-            .delimited_by(just('{').padded(), just('}').padded())
+            .delimited_by(just('{').padded_by(ws.clone()), just('}').padded_by(ws.clone()))
             .map(Json::Object);
 
         choice((
@@ -75,7 +82,7 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Simple<'a, char>>> 
             array,
             object,
         ))
-        .padded()
+        .padded_by(ws)
     })
 }
 
@@ -90,6 +97,46 @@ fn main() {
                 eprintln!("Error: {}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn array_with_trailing_comma_and_comments() {
+        let src = r#"
+            [
+                1,
+                2,
+                3,# comment
+            ]
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert_eq!(
+            parsed,
+            Json::Array(vec![Json::Number(1.0), Json::Number(2.0), Json::Number(3.0)])
+        );
+    }
+
+    #[test]
+    fn object_with_trailing_comma_and_comments() {
+        let src = r#"
+            {
+                # leading comment
+                "a": true,
+                "b": [false,],
+            }
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert_eq!(
+            parsed,
+            Json::Object(vec![
+                ("a".into(), Json::Bool(true)),
+                ("b".into(), Json::Array(vec![Json::Bool(false)])),
+            ])
+        );
     }
 }
 
