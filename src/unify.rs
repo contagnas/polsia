@@ -185,14 +185,21 @@ fn unify_tree_inner(value: &SpannedJson, path: &str) -> Result<SpannedJson, Unif
             for item in items {
                 out.push(unify_tree_inner(item, path)?);
             }
-            Ok(SpannedJson { span: value.span, kind: SpannedKind::Array(out) })
+            Ok(SpannedJson {
+                span: value.span,
+                kind: SpannedKind::Array(out),
+            })
         }
         SpannedKind::Object(members) => {
             use std::collections::HashMap;
             let mut seen: HashMap<String, SpannedJson> = HashMap::new();
             let mut out: Vec<(String, SpannedJson, Span)> = Vec::new();
             for (k, v, span) in members {
-                let new_path = if path.is_empty() { k.clone() } else { format!("{}.{}", path, k) };
+                let new_path = if path.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{}.{}", path, k)
+                };
                 let unified_v = unify_tree_inner(v, &new_path)?;
                 if let Some(prev) = seen.get(k) {
                     let merged = unify_spanned(prev, &unified_v, &new_path)?;
@@ -202,7 +209,10 @@ fn unify_tree_inner(value: &SpannedJson, path: &str) -> Result<SpannedJson, Unif
                 }
                 out.push((k.clone(), unified_v, *span));
             }
-            Ok(SpannedJson { span: value.span, kind: SpannedKind::Object(out) })
+            Ok(SpannedJson {
+                span: value.span,
+                kind: SpannedKind::Object(out),
+            })
         }
         _ => Ok(value.clone()),
     }

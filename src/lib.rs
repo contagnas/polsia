@@ -4,9 +4,7 @@ pub mod unify;
 
 pub use parser::parser;
 pub use types::{Json, JsonType, SpannedJson, SpannedKind};
-pub use unify::{
-    UnifyError, unify, unify_spanned, unify_tree, unify_with_path,
-};
+pub use unify::{UnifyError, unify, unify_spanned, unify_tree, unify_with_path};
 
 #[cfg(test)]
 mod tests {
@@ -192,16 +190,16 @@ mod tests {
             Ok(_) => panic!("expected error"),
             Err(err) => {
                 use chumsky::error::LabelError;
-                let mut e = Rich::custom(err.span.clone(), err.msg.clone());
+                let mut e = Rich::custom(err.span, err.msg.clone());
                 <Rich<_> as LabelError<&str, _>>::in_context(
                     &mut e,
                     "previous value here",
-                    err.prev_span.clone(),
+                    err.prev_span,
                 );
                 let msg = e.to_string();
                 assert!(msg.contains("Int"));
                 assert!(msg.contains("String"));
-                let span = e.span().clone().into_range();
+                let span = (*e.span()).into_range();
                 let prev_span = e.contexts().next().unwrap().1.into_range();
                 let line_for = |i: usize| src[..i].chars().filter(|&c| c == '\n').count() + 1;
                 assert_eq!(line_for(span.start), 3);
@@ -223,15 +221,15 @@ mod tests {
             Ok(_) => panic!("expected error"),
             Err(err) => {
                 use chumsky::error::LabelError;
-                let mut e = Rich::custom(err.span.clone(), err.msg.clone());
+                let mut e = Rich::custom(err.span, err.msg.clone());
                 <Rich<_> as LabelError<&str, _>>::in_context(
                     &mut e,
                     "previous value here",
-                    err.prev_span.clone(),
+                    err.prev_span,
                 );
                 let msg = e.to_string();
                 assert!(msg.contains("bar"));
-                let span = e.span().clone().into_range();
+                let span = (*e.span()).into_range();
                 let prev_span = e.contexts().next().unwrap().1.into_range();
                 assert!(src[span.start..span.end].contains("bar"));
                 assert!(src[prev_span.start..prev_span.end].contains("bar"));

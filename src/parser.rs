@@ -9,10 +9,10 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a,
         .then(none_of('\n').repeated())
         .then_ignore(text::newline().or_not())
         .ignored();
-    let ws = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+    let ws = choice((text::whitespace().at_least(1).ignored(), comment))
         .repeated()
         .ignored();
-    let ws1 = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+    let ws1 = choice((text::whitespace().at_least(1).ignored(), comment))
         .repeated()
         .at_least(1)
         .ignored();
@@ -39,12 +39,12 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a,
         .delimited_by(just('"'), just('"'))
         .map(|s| s);
 
-    let key_string = string.clone();
+    let key_string = string;
     let key = key_string.or(text::ident().map(|s: &str| s.to_string()));
-    let key_span = key.clone().map_with(|k: String, e| (k, e.span()));
+    let key_span = key.map_with(|k: String, e| (k, e.span()));
 
     let member = key_span
-        .then_ignore(just(':').padded_by(ws.clone()))
+        .then_ignore(just(':').padded_by(ws))
         .then(spanned_value_no_pad())
         .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
             let span = SimpleSpan::new((), k_span.start()..v.span.end());
@@ -52,9 +52,9 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a,
             (k, v, span)
         });
 
-    let comma = just(',').then_ignore(ws.clone()).ignored();
+    let comma = just(',').then_ignore(ws).ignored();
     let top_object = member
-        .separated_by(choice((comma, ws1.clone())))
+        .separated_by(choice((comma, ws1)))
         .allow_trailing()
         .at_least(1)
         .collect::<Vec<_>>()
@@ -64,9 +64,7 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a,
             kind: SpannedKind::Object(members),
         });
 
-    choice((top_object, value))
-        .padded_by(ws)
-        .map(|v| v)
+    choice((top_object, value)).padded_by(ws).map(|v| v)
 }
 
 fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Err<Rich<'a, char>>> {
@@ -89,10 +87,10 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
             .then(none_of('\n').repeated())
             .then_ignore(text::newline().or_not())
             .ignored();
-        let ws = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+        let ws = choice((text::whitespace().at_least(1).ignored(), comment))
             .repeated()
             .ignored();
-        let ws1 = choice((text::whitespace().at_least(1).ignored(), comment.clone()))
+        let ws1 = choice((text::whitespace().at_least(1).ignored(), comment))
             .repeated()
             .at_least(1)
             .ignored();
@@ -102,11 +100,11 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
         let number = just('-')
             .or_not()
             .then(int)
-            .then(just('.').then(digits.clone()).or_not())
+            .then(just('.').then(digits).or_not())
             .then(
                 one_of("eE")
                     .then(one_of("+-").or_not())
-                    .then(digits.clone())
+                    .then(digits)
                     .or_not(),
             )
             .to_slice()
@@ -141,19 +139,16 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
 
         let array = value
             .clone()
-            .separated_by(just(',').padded_by(ws.clone()))
+            .separated_by(just(',').padded_by(ws))
             .allow_trailing()
             .collect()
-            .delimited_by(
-                just('[').padded_by(ws.clone()),
-                ws.clone().then_ignore(just(']')),
-            )
+            .delimited_by(just('[').padded_by(ws), ws.then_ignore(just(']')))
             .map_with(|vals, e| SpannedJson {
                 span: e.span(),
                 kind: SpannedKind::Array(vals),
             });
 
-        let key_string = string.clone().map(|j| {
+        let key_string = string.map(|j| {
             if let SpannedJson {
                 kind: SpannedKind::String(s),
                 ..
@@ -166,33 +161,29 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedJson, extra::Er
         });
         let key = key_string.or(text::ident().map(|s: &str| s.to_string()));
 
-        let key_span = key.clone().map_with(|k: String, e| (k, e.span()));
+        let key_span = key.map_with(|k: String, e| (k, e.span()));
 
         let member = key_span
-            .then_ignore(just(':').padded_by(ws.clone()))
+            .then_ignore(just(':').padded_by(ws))
             .then(value.clone())
             .map(|((k, k_span), mut v): ((String, Span), SpannedJson)| {
                 let span = SimpleSpan::new((), k_span.start()..v.span.end());
                 v.span = span;
                 (k, v, span)
             });
-        let comma = just(',').then_ignore(ws.clone()).ignored();
+        let comma = just(',').then_ignore(ws).ignored();
         let object = member
-            .separated_by(choice((comma, ws1.clone())))
+            .separated_by(choice((comma, ws1)))
             .allow_trailing()
             .collect::<Vec<_>>()
-            .delimited_by(
-                just('{').padded_by(ws.clone()),
-                ws.clone().then_ignore(just('}')),
-            )
+            .delimited_by(just('{').padded_by(ws), ws.then_ignore(just('}')))
             .map_with(|members, e| SpannedJson {
                 span: e.span(),
                 kind: SpannedKind::Object(members),
             });
 
         let chain = key_span
-            .clone()
-            .then_ignore(just(':').padded_by(ws.clone()))
+            .then_ignore(just(':').padded_by(ws))
             .repeated()
             .at_least(1)
             .collect::<Vec<_>>()

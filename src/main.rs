@@ -12,13 +12,13 @@ fn main() {
             Ok(json) => println!("{:#?}", json.to_json()),
             Err(err) => {
                 use chumsky::error::LabelError;
-                let mut e = Rich::custom(err.span.clone(), err.msg.clone());
+                let mut e = Rich::custom(err.span, err.msg.clone());
                 <Rich<_> as LabelError<&str, _>>::in_context(
                     &mut e,
                     "previous value here",
-                    err.prev_span.clone(),
+                    err.prev_span,
                 );
-                let span = e.span().clone().into_range();
+                let span = (*e.span()).into_range();
                 let msg = e.to_string();
                 Report::build(ReportKind::Error, (filename.clone(), span.clone()))
                     .with_message(&msg)
@@ -39,7 +39,7 @@ fn main() {
         },
         Err(errs) => {
             for e in errs {
-                let span = e.span().clone().into_range();
+                let span = (*e.span()).into_range();
                 let msg = e.to_string();
                 Report::build(ReportKind::Error, (filename.clone(), span.clone()))
                     .with_message(&msg)
