@@ -105,6 +105,25 @@ fn unify(a: &Json, b: &Json) -> Result<Json, String> {
     match (a, b) {
         (Json::Type(ta), Json::Type(tb)) => unify_types(ta, tb).map(Json::Type),
         (Json::Type(t), val) | (val, Json::Type(t)) => unify_type_value(t, val),
+        (Json::Object(a_members), Json::Object(b_members)) => {
+            use std::collections::BTreeMap;
+            let mut map: BTreeMap<String, Json> = BTreeMap::new();
+            for (k, v) in a_members {
+                map.insert(k.clone(), v.clone());
+            }
+            for (k, v) in b_members {
+                match map.get(k) {
+                    Some(existing) => {
+                        let unified = unify(existing, v)?;
+                        map.insert(k.clone(), unified);
+                    }
+                    None => {
+                        map.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            Ok(Json::Object(map.into_iter().collect()))
+        }
         _ => Err("values do not unify".into()),
     }
 }
@@ -384,6 +403,49 @@ mod tests {
     fn unify_string_with_value() {
         let src = r#"{ "a": String, "a": "hi" }"#;
         assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn unify_recursive_object() {
+        let src = r#"
+            {
+                foo: { bar: Int },
+                foo: { bar: 3 },
+            }
+        "#;
+        assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn object_union_of_keys_parses() {
+        let src = r#"
+            {
+                foo: { bar: 1 },
+                foo: { baz: 2 },
+            }
+        "#;
+        assert!(parser().parse(src).into_result().is_ok());
+    }
+
+    #[test]
+    fn unify_object_union_of_keys() {
+        let a = Json::Object(vec![(
+            "foo".into(),
+            Json::Object(vec![("bar".into(), Json::Number(1.0))]),
+        )]);
+        let b = Json::Object(vec![(
+            "foo".into(),
+            Json::Object(vec![("baz".into(), Json::Number(2.0))]),
+        )]);
+        let unified = unify(&a, &b).unwrap();
+        let expected = Json::Object(vec![(
+            "foo".into(),
+            Json::Object(vec![
+                ("bar".into(), Json::Number(1.0)),
+                ("baz".into(), Json::Number(2.0)),
+            ]),
+        )]);
+        assert_eq!(unified, expected);
     }
 
     #[test]
