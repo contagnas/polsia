@@ -99,12 +99,28 @@ fn unify_type_value(t: &JsonType, val: &Json) -> Result<Json, String> {
 }
 
 fn unify(a: &Json, b: &Json) -> Result<Json, String> {
+    unify_with_path(a, b, "")
+}
+
+fn add_path(path: &str, msg: String) -> String {
+    if path.is_empty() {
+        msg
+    } else {
+        format!("{}: {}", path, msg)
+    }
+}
+
+fn unify_with_path(a: &Json, b: &Json, path: &str) -> Result<Json, String> {
     if a == b {
         return Ok(a.clone());
     }
     match (a, b) {
-        (Json::Type(ta), Json::Type(tb)) => unify_types(ta, tb).map(Json::Type),
-        (Json::Type(t), val) | (val, Json::Type(t)) => unify_type_value(t, val),
+        (Json::Type(ta), Json::Type(tb)) => unify_types(ta, tb)
+            .map(Json::Type)
+            .map_err(|e| add_path(path, e)),
+        (Json::Type(t), val) | (val, Json::Type(t)) => {
+            unify_type_value(t, val).map_err(|e| add_path(path, e))
+        }
         (Json::Object(a_members), Json::Object(b_members)) => {
             use std::collections::BTreeMap;
             let mut map: BTreeMap<String, Json> = BTreeMap::new();
@@ -114,7 +130,12 @@ fn unify(a: &Json, b: &Json) -> Result<Json, String> {
             for (k, v) in b_members {
                 match map.get(k) {
                     Some(existing) => {
-                        let unified = unify(existing, v)?;
+                        let new_path = if path.is_empty() {
+                            k.clone()
+                        } else {
+                            format!("{}.{}", path, k)
+                        };
+                        let unified = unify_with_path(existing, v, &new_path)?;
                         map.insert(k.clone(), unified);
                     }
                     None => {
@@ -124,7 +145,7 @@ fn unify(a: &Json, b: &Json) -> Result<Json, String> {
             }
             Ok(Json::Object(map.into_iter().collect()))
         }
-        _ => Err("values do not unify".into()),
+        _ => Err(add_path(path, "values do not unify".into())),
     }
 }
 
@@ -215,7 +236,7 @@ fn parser<'a>() -> impl Parser<'a, &'a str, Json, extra::Err<Rich<'a, char>>> {
                 for (k, v, span) in &members {
                     match seen.get(k.as_str()) {
                         Some((prev, prev_span)) => {
-                            if let Err(msg) = unify(prev, v) {
+                            if let Err(msg) = unify_with_path(prev, v, k) {
                                 let mut err = Rich::custom(
                                     span.clone(),
                                     format!("duplicate key '{}' could not be unified: {}", k, msg),
@@ -465,6 +486,25 @@ mod tests {
                 let line_for = |i: usize| src[..i].chars().filter(|&c| c == '\n').count() + 1;
                 assert_eq!(line_for(span.start), 3);
                 assert_eq!(line_for(prev_span.start), 2);
+            }
+        }
+    }
+
+    #[test]
+    fn nested_unify_error_mentions_bar() {
+        let src = r#"
+            {
+                foo: { bar: String },
+                foo: { bar: Int },
+            }
+        "#;
+        let result = parser().parse(src).into_result();
+        match result {
+            Ok(_) => panic!("expected error"),
+            Err(errs) => {
+                assert!(!errs.is_empty());
+                let msg = errs[0].to_string();
+                assert!(msg.contains("bar"));
             }
         }
     }
