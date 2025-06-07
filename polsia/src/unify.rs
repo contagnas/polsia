@@ -64,12 +64,14 @@ fn unify_type_value(t: &ValType, val: &Value) -> Result<Value, String> {
         ValType::Any => Ok(val.clone()),
         ValType::Nothing => Err("cannot unify Nothing".into()),
         ValType::Int => match val {
-            Value::Number(n) if n.fract() == 0.0 => Ok(Value::Number(*n)),
+            Value::Int(n) => Ok(Value::Int(*n)),
+            Value::Float(n) if n.fract() == 0.0 => Ok(Value::Int(*n as i64)),
             Value::Type(other) => unify_types(t, other).map(Value::Type),
             _ => Err("expected integer".into()),
         },
         ValType::Rational | ValType::Float | ValType::Number => match val {
-            Value::Number(n) => Ok(Value::Number(*n)),
+            Value::Int(n) => Ok(Value::Int(*n)),
+            Value::Float(n) => Ok(Value::Float(*n)),
             Value::Type(other) => unify_types(t, other).map(Value::Type),
             _ => Err("expected number".into()),
         },
@@ -325,7 +327,8 @@ fn value_to_kind(j: Value) -> ValueKind {
     match j {
         Value::Null => ValueKind::Null,
         Value::Bool(b) => ValueKind::Bool(b),
-        Value::Number(n) => ValueKind::Number(n),
+        Value::Int(n) => ValueKind::Int(n),
+        Value::Float(n) => ValueKind::Float(n),
         Value::String(s) => ValueKind::String(s),
         Value::Array(arr) => ValueKind::Array(
             arr.into_iter()
@@ -358,7 +361,8 @@ fn kind_to_value(k: &ValueKind) -> Value {
     match k {
         ValueKind::Null => Value::Null,
         ValueKind::Bool(b) => Value::Bool(*b),
-        ValueKind::Number(n) => Value::Number(*n),
+        ValueKind::Int(n) => Value::Int(*n),
+        ValueKind::Float(n) => Value::Float(*n),
         ValueKind::String(s) => Value::String(s.clone()),
         ValueKind::Array(arr) => Value::Array(arr.iter().map(|v| v.to_value()).collect()),
         ValueKind::Object(obj) => Value::Object(

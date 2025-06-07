@@ -30,11 +30,7 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
             unified.to_value(),
-            Value::Array(vec![
-                Value::Number(1.0),
-                Value::Number(2.0),
-                Value::Number(3.0)
-            ])
+            Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
         );
     }
 
@@ -71,11 +67,8 @@ mod tests {
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![
-                ("a".into(), Value::Number(1.0)),
-                (
-                    "b".into(),
-                    Value::Object(vec![("c".into(), Value::Number(2.0))]),
-                ),
+                ("a".into(), Value::Int(1)),
+                ("b".into(), Value::Object(vec![("c".into(), Value::Int(2))]),),
             ])
         );
     }
@@ -87,7 +80,7 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(
             unified.to_value(),
-            Value::Object(vec![("a".into(), Value::Number(1.0))])
+            Value::Object(vec![("a".into(), Value::Int(1))])
         );
     }
 
@@ -168,18 +161,18 @@ mod tests {
     fn unify_object_union_of_keys() {
         let a = Value::Object(vec![(
             "foo".into(),
-            Value::Object(vec![("bar".into(), Value::Number(1.0))]),
+            Value::Object(vec![("bar".into(), Value::Int(1))]),
         )]);
         let b = Value::Object(vec![(
             "foo".into(),
-            Value::Object(vec![("baz".into(), Value::Number(2.0))]),
+            Value::Object(vec![("baz".into(), Value::Int(2))]),
         )]);
         let unified = unify(&a, &b).unwrap();
         let expected = Value::Object(vec![(
             "foo".into(),
             Value::Object(vec![
-                ("bar".into(), Value::Number(1.0)),
-                ("baz".into(), Value::Number(2.0)),
+                ("bar".into(), Value::Int(1)),
+                ("baz".into(), Value::Int(2)),
             ]),
         )]);
         assert_eq!(unified, expected);
@@ -298,8 +291,8 @@ mod tests {
             Value::Object(vec![(
                 "foo".into(),
                 Value::Object(vec![
-                    ("bar".into(), Value::Number(1.0)),
-                    ("baz".into(), Value::Number(2.0)),
+                    ("bar".into(), Value::Int(1)),
+                    ("baz".into(), Value::Int(2)),
                 ]),
             ),])
         );
@@ -314,7 +307,7 @@ mod tests {
             unified.to_value(),
             Value::Object(vec![(
                 "company".into(),
-                Value::Object(vec![("founded".into(), Value::Number(1985.0))]),
+                Value::Object(vec![("founded".into(), Value::Int(1985))]),
             ),])
         );
     }
@@ -346,7 +339,7 @@ mod tests {
                 (
                     "meadow".into(),
                     Value::Object(vec![
-                        ("age".into(), Value::Number(4.0)),
+                        ("age".into(), Value::Int(4)),
                         ("name".into(), Value::String("meadow".into())),
                     ]),
                 ),
@@ -390,5 +383,48 @@ mod tests {
                 ("hello".into(), Value::String("world".into())),
             ])
         );
+    }
+
+    #[test]
+    fn parse_int_and_float_values() {
+        let src = "my_int: 1\nmy_float: 3.1415";
+        let parsed = parser().parse(src).into_result().unwrap();
+        let unified = unify_tree(&parsed).unwrap();
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                ("my_int".into(), Value::Int(1)),
+                ("my_float".into(), Value::Float(3.1415)),
+            ])
+        );
+    }
+
+    #[test]
+    fn int_type_chain_parses() {
+        let src = "my_int: Float\nmy_int: 1";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn int_type_chain_with_number_unifies() {
+        let src = "my_int: Number\nmy_int: Float\nmy_int: 1";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn float_type_chain_unifies() {
+        let src = "my_float: Number\nmy_float: Float\nmy_float: 3.1415";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn int_exports_without_decimal() {
+        let src = "1";
+        let parsed = parser().parse(src).into_result().unwrap();
+        let unified = unify_tree(&parsed).unwrap();
+        assert_eq!(unified.to_value().to_pretty_string(), "1");
     }
 }
