@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
+import { json } from '@codemirror/lang-json'
 import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
 import type { Extension } from '@codemirror/state'
@@ -130,7 +131,14 @@ function App() {
           <div className="section-header">
             <span>JSON Output</span>
           </div>
-          <pre className="pane">{output}</pre>
+          <CodeMirror
+            className="pane"
+            theme={theme}
+            height="100%"
+            value={output}
+            extensions={[json()]}
+            editable={false}
+          />
         </div>
       </div>
       <footer className="footer">
