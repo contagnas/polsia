@@ -46,6 +46,7 @@ html,
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  gap: 8px;
 }
 
 .editor,
@@ -96,6 +97,12 @@ html,
 }
 
 .theme-dark {
+  background: black;
+  color: #00ff00;
+}
+
+.theme-dark select,
+.theme-dark option {
   background: black;
   color: #00ff00;
 }
