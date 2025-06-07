@@ -367,4 +367,28 @@ mod tests {
         let parsed = parser().parse(src).into_result().unwrap();
         assert!(unify_tree(&parsed).is_err());
     }
+
+    #[test]
+    fn unresolved_reference_fails() {
+        let src = "hello: world";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_err());
+    }
+
+    #[test]
+    fn reference_to_value_resolves() {
+        let src = r#"
+            greet: "world"
+            hello: greet
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        let unified = unify_tree(&parsed).unwrap();
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                ("greet".into(), Value::String("world".into())),
+                ("hello".into(), Value::String("world".into())),
+            ])
+        );
+    }
 }
