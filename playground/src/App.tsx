@@ -80,7 +80,7 @@ function App() {
   const extensions: Extension[] = [javascript()]
   if (power === 'high') {
     extensions.unshift(
-      vim({ status: true, statusbar: statusRef.current } as any)
+      vim({ status: true } as any)
     )
   } else if (power === 'low') {
     extensions.unshift(emacs())
