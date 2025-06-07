@@ -88,37 +88,51 @@ function App() {
     <div className={`app theme-${theme}`}>
       <header className="header">
         <span className="title">POLSIA</span>
-        <button className="switcher" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+        <button
+          className="switcher"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        >
           Switch to {theme === 'dark' ? 'light' : 'dark'}
         </button>
       </header>
-      <div className="editor">
-        <label className="power">
-          power level:
-          <select value={power} onChange={(e) => setPower(e.target.value as any)}>
-            <option value="low">low (emacs)</option>
-            <option value="medium">medium (basic)</option>
-            <option value="high">high (vim)</option>
-          </select>
-        </label>
-        <CodeMirror
-          className="pane"
-          theme={theme}
-          height="100%"
-          value={src}
-          extensions={extensions}
-          onChange={(v) => {
-            setSrc(v)
-            update(v)
-          }}
-        />
-        <pre className="pane">{output}</pre>
+      <div className="content">
+        <div className="editor">
+          <div className="section-header">
+            <span>Polsia Input</span>
+            <label className="power">
+              power level:
+              <select
+                value={power}
+                onChange={(e) => setPower(e.target.value as any)}
+              >
+                <option value="low">low (emacs)</option>
+                <option value="medium">medium (basic)</option>
+                <option value="high">high (vim)</option>
+              </select>
+            </label>
+          </div>
+          <CodeMirror
+            className="pane"
+            theme={theme}
+            height="100%"
+            value={src}
+            extensions={extensions}
+            onChange={(v) => {
+              setSrc(v)
+              update(v)
+            }}
+          />
+          <div ref={statusRef} id="status" className="status"></div>
+        </div>
+        <div className="output">
+          <div className="section-header">
+            <span>JSON Output</span>
+          </div>
+          <pre className="pane">{output}</pre>
+        </div>
       </div>
-      <div ref={statusRef} id="status" className="status"></div>
       <footer className="footer">
-        <Marquee autoFill>
-          POLSIA &nbsp;
-        </Marquee>
+        <Marquee autoFill>POLSIA &nbsp;</Marquee>
       </footer>
     </div>
   )
