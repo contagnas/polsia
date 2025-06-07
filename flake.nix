@@ -23,6 +23,7 @@
           buildInputs = [
             rustToolchain
             pkgs.wasm-pack
+            pkgs.nodejs
           ];
         };
       }

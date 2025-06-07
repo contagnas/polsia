@@ -15,15 +15,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. Check out the repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Configure GitHub Pages environment
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      # 3. Build the WASM package
       - name: Build WASM with wasm-pack
         uses: jetli/wasm-pack-action@v0.4.0
         with:
@@ -31,36 +28,41 @@ jobs:
 
       - name: Pack wasm
         run: |
-          wasm-pack build --target web --release -- --features wasm
+          wasm-pack build --target bundler --release -- --features wasm
 
-      # 4. Prepare a 'dist' directory for static files
-      - name: Prepare site files
-        run: |
-          mkdir -p dist
-          mv pkg/ dist/
-          cp index.html dist/
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
 
-      # 5. (Optional) Debug: show contents to ensure 'dist' is not empty
+      - name: Install npm dependencies
+        run: npm install
+        working-directory: playground
+
+      - name: Run frontend tests
+        run: npm test
+        working-directory: playground
+
+      - name: Build React site
+        run: npm run build
+        working-directory: playground
+
       - name: debug - list dist
-        run: ls -R dist
+        run: ls -R playground/dist
 
-      # 6. Upload the dist/ folder as a "github-pages" artifact
       - name: Upload Pages artifact
         id: upload
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/
+          path: playground/dist
 
   deploy:
-    # Wait for build to finish
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      # Expose the Pages URL as an output
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      # 7. Deploy to GitHub Pages using the artifact named "github-pages"
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4

@@ -1,5 +1,5 @@
 use crate::{parser, unify_tree};
-use ariadne::{Color, Label, Report, ReportKind, Config, sources};
+use ariadne::{Color, Config, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
 

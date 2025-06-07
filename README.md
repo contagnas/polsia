@@ -47,11 +47,25 @@ cargo test
 
 ### Web playground
 
-Build the WebAssembly package using [wasm-pack](https://github.com/rustwasm/wasm-pack):
+The playground is a small React application in the `playground/` directory built with [Vite](https://vitejs.dev/).
+To run it locally:
 
 ```bash
-wasm-pack build --target web --release -- --features wasm
+# build the WebAssembly package
+wasm-pack build --target bundler --release -- --features wasm
+
+# install dependencies
+cd playground
+npm install
+
+# run frontend tests
+npm test
+
+# start the dev server
+npm run dev
+
+# build the static site
+npm run build
 ```
 
-Run a local web server (e.g. `python3 -m http.server`) and open
-`http://localhost:8000/index.html` to try the playground.
+The site will be available at the URL printed by Vite (usually `http://localhost:5173`).
