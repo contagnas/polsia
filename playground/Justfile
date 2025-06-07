@@ -1,0 +1,22 @@
+set fallback
+
+_wasm-build:
+  just polsia wasm-build
+
+install: _wasm-build
+  npm install
+
+dev: install
+  npm run dev
+
+build: install
+  npm run build
+
+lint:
+  npm run lint
+
+format:
+  npm run format
+
+test: install
+  npm test

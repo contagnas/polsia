@@ -24,6 +24,7 @@
             rustToolchain
             pkgs.wasm-pack
             pkgs.nodejs
+            pkgs.just
           ];
         };
       }

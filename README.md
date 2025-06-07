@@ -27,22 +27,12 @@ person: {
 person: name: "Jane"
 ```
 
-## Building
-
-Use Cargo to build and run:
-
-```bash
-cargo run <path-to-file>
-```
-
 ## Testing
 
 Run the formatter, lints and tests:
 
 ```bash
-cargo fmt -- --check
-cargo clippy -- -D warnings
-cargo test
+just test
 ```
 
 ### Web playground
@@ -51,21 +41,7 @@ The playground is a small React application in the `playground/` directory built
 To run it locally:
 
 ```bash
-# build the WebAssembly package
-wasm-pack build --target bundler --release -- --features wasm
-
-# install dependencies
-cd playground
-npm install
-
-# run frontend tests
-npm test
-
-# start the dev server
-npm run dev
-
-# build the static site
-npm run build
+just playground dev
 ```
 
-The site will be available at the URL printed by Vite (usually `http://localhost:5173`).
+The site will be available at the URL printed by Vite (usually `http://localhost:5173/polsia/`).

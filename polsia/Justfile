@@ -1,0 +1,19 @@
+fix-fmt:
+  cargo fmt
+
+fmt:
+  cargo fmt -- --check
+
+clippy:
+  cargo clippy -- -D warnings
+
+test: fmt clippy check
+  cargo test
+
+check:
+  cargo check --target wasm32-unknown-unknown --features wasm
+
+wasm-build:
+  echo "wasm-build running from:"
+  pwd
+  wasm-pack build --target bundler --release -- --features wasm
