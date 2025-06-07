@@ -427,4 +427,13 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         assert_eq!(unified.to_value().to_pretty_string(), "1");
     }
+
+    #[test]
+    fn demo_file_parses_to_json() {
+        let src = std::fs::read_to_string("../examples/demo.pls").unwrap();
+        let parsed = parser().parse(&src).into_result().unwrap();
+        let unified = unify_tree(&parsed).unwrap();
+        let json = unified.to_value().to_pretty_string();
+        assert!(!json.is_empty());
+    }
 }
