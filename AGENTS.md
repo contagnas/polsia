@@ -11,5 +11,6 @@
 - After installing dependencies:
    - run `wasm-pack build --target bundler --release -- --features wasm`
    - run `npm test` in `playground/` to verify the frontend
+   - run `npm run lint` and `npm run format` in `playground/` when changing frontend code
    - run `npm run build` in `playground/` to ensure the React playground compiles.
 

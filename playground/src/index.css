@@ -1,4 +1,6 @@
-body, html, #root {
+body,
+html,
+#root {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -9,7 +11,7 @@ body, html, #root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  font-family: "Courier New", monospace;
+  font-family: 'Courier New', monospace;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -27,7 +29,6 @@ body, html, #root {
   margin-right: 1rem;
 }
 
-
 .power {
   margin: 4px;
 }
@@ -39,8 +40,6 @@ body, html, #root {
   background: inherit;
   color: inherit;
 }
-
-
 
 .content {
   flex: 1;
@@ -97,12 +96,12 @@ body, html, #root {
 
 .theme-dark {
   background: black;
-  color: #00FF00;
+  color: #00ff00;
 }
 
 .theme-light {
-  background: #FFFFE0;
-  color: #FF00FF;
+  background: #ffffe0;
+  color: #ff00ff;
 }
 
 .switcher {
