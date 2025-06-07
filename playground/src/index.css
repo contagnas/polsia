@@ -41,29 +41,43 @@ body, html, #root {
 }
 
 
-.editor {
+
+.content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
+.editor,
+.output {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px;
+  border-bottom: 1px solid currentColor;
+}
+
 .pane {
   flex: 1;
-  height: 50%;
+  height: 100%;
   box-sizing: border-box;
 }
 
 @media (min-width: 700px) {
-  .editor {
+  .content {
     flex-direction: row;
-  }
-  .pane {
-    height: 100%;
   }
 }
 
-.editor pre {
+.output pre {
   margin: 0;
   padding: 10px;
   overflow: auto;
