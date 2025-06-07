@@ -6,7 +6,7 @@ import { emacs } from '@replit/codemirror-emacs'
 import type { Extension } from '@codemirror/state'
 import Marquee from 'react-fast-marquee'
 import './index.css'
-import * as wasm  from 'polsia'
+import * as wasm from 'polsia'
 
 const DEFAULT_SRC = `# Polsia (Edit me!)
 # https://github.com/contagnas/polsia
@@ -54,7 +54,7 @@ users: dmed: {
 
 trailingCommas: true,
 
-# }`;
+# }`
 
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
@@ -64,7 +64,7 @@ function App() {
   const statusRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       setOutput(wasm.polsia_to_json(src))
     })()
   }, [])
@@ -79,7 +79,9 @@ function App() {
 
   const extensions: Extension[] = [javascript()]
   if (power === 'high') {
-    extensions.unshift(vim({ status: true, statusbar: statusRef.current } as any))
+    extensions.unshift(
+      vim({ status: true, statusbar: statusRef.current } as any)
+    )
   } else if (power === 'low') {
     extensions.unshift(emacs())
   }
