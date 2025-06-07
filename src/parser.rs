@@ -200,6 +200,31 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                 v
             });
 
+        let reference = text::ident()
+            .separated_by(just('.'))
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .map(|parts: Vec<&str>| parts.join("."))
+            .filter(|s: &String| {
+                !matches!(
+                    s.as_str(),
+                    "null"
+                        | "true"
+                        | "false"
+                        | "Any"
+                        | "Nothing"
+                        | "Int"
+                        | "Number"
+                        | "Rational"
+                        | "Float"
+                        | "String"
+                )
+            })
+            .map_with(|s: String, e| SpannedValue {
+                span: e.span(),
+                kind: ValueKind::Reference(s),
+            });
+
         choice((
             just("null").map_with(|_, e| SpannedValue {
                 span: e.span(),
@@ -246,6 +271,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             array,
             object,
             chain,
+            reference,
         ))
     })
 }

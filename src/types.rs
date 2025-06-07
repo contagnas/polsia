@@ -11,6 +11,7 @@ pub enum Value {
     String(String),
     Array(Vec<Value>),
     Object(Vec<(String, Value)>),
+    Reference(String),
     Type(ValType),
 }
 
@@ -28,6 +29,7 @@ pub enum ValueKind {
     String(String),
     Array(Vec<SpannedValue>),
     Object(Vec<(String, SpannedValue, Span)>),
+    Reference(String),
     Type(ValType),
 }
 
@@ -44,6 +46,7 @@ impl SpannedValue {
                     .map(|(k, v, _)| (k.clone(), v.to_value()))
                     .collect(),
             ),
+            ValueKind::Reference(r) => Value::Reference(r.clone()),
             ValueKind::Type(t) => Value::Type(t.clone()),
         }
     }
@@ -62,6 +65,7 @@ impl Value {
                     obj.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
                 JsValue::Object(map)
             }
+            Value::Reference(r) => JsValue::String(r.clone()),
             Value::Type(t) => panic!("unresolved type {:?}", t),
         }
     }

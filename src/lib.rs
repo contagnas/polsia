@@ -318,4 +318,53 @@ mod tests {
             ),])
         );
     }
+
+    #[test]
+    fn reference_unifies_successfully() {
+        let src = r#"
+            person: {
+              name: String
+              age: Int
+            }
+
+            meadow: person
+            meadow: name: "meadow"
+            meadow: age: 4
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        let unified = unify_tree(&parsed).unwrap();
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                (
+                    "person".into(),
+                    Value::Object(vec![
+                        ("name".into(), Value::Type(ValType::String)),
+                        ("age".into(), Value::Type(ValType::Int)),
+                    ]),
+                ),
+                (
+                    "meadow".into(),
+                    Value::Object(vec![
+                        ("age".into(), Value::Number(4.0)),
+                        ("name".into(), Value::String("meadow".into())),
+                    ]),
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn reference_unify_type_mismatch() {
+        let src = r#"
+            person: name: String
+            person: age: Int
+
+            forest: person
+            forest: name: "forest"
+            forest: age: "old"
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_err());
+    }
 }
