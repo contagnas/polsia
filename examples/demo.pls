@@ -70,6 +70,14 @@ bear: species: "bear"
 # users: dmed: bear # doesn't match, causes an error
 
 
+# noexport can be applied to a nested field
+noexport credentials.password
+credentials: {
+  username: "admin"
+  password: "hunter2"
+}
+
+
 trailingCommas: true,
 
 # }
