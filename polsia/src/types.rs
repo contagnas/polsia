@@ -7,7 +7,8 @@ pub type Span = SimpleSpan<usize>;
 pub enum Value {
     Null,
     Bool(bool),
-    Number(f64),
+    Int(i64),
+    Float(f64),
     String(String),
     Array(Vec<Value>),
     Object(Vec<(String, Value)>),
@@ -25,7 +26,8 @@ pub struct SpannedValue {
 pub enum ValueKind {
     Null,
     Bool(bool),
-    Number(f64),
+    Int(i64),
+    Float(f64),
     String(String),
     Array(Vec<SpannedValue>),
     Object(Vec<(String, SpannedValue, Span)>),
@@ -38,7 +40,8 @@ impl SpannedValue {
         match &self.kind {
             ValueKind::Null => Value::Null,
             ValueKind::Bool(b) => Value::Bool(*b),
-            ValueKind::Number(n) => Value::Number(*n),
+            ValueKind::Int(n) => Value::Int(*n),
+            ValueKind::Float(n) => Value::Float(*n),
             ValueKind::String(s) => Value::String(s.clone()),
             ValueKind::Array(a) => Value::Array(a.iter().map(|j| j.to_value()).collect()),
             ValueKind::Object(m) => Value::Object(
@@ -57,7 +60,8 @@ impl Value {
         match self {
             Value::Null => JsValue::Null,
             Value::Bool(b) => JsValue::Bool(*b),
-            Value::Number(n) => JsValue::Number(Number::from_f64(*n).unwrap()),
+            Value::Int(n) => JsValue::Number(Number::from(*n)),
+            Value::Float(n) => JsValue::Number(Number::from_f64(*n).unwrap()),
             Value::String(s) => JsValue::String(s.clone()),
             Value::Array(arr) => JsValue::Array(arr.iter().map(|v| v.to_value()).collect()),
             Value::Object(obj) => {

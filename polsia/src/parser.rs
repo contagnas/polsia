@@ -109,9 +109,16 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                     .or_not(),
             )
             .to_slice()
-            .map_with(|s: &str, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Number(s.parse().unwrap()),
+            .map_with(|s: &str, e| {
+                let kind = if s.contains('.') || s.contains('e') || s.contains('E') {
+                    ValueKind::Float(s.parse().unwrap())
+                } else {
+                    ValueKind::Int(s.parse().unwrap())
+                };
+                SpannedValue {
+                    span: e.span(),
+                    kind,
+                }
             });
 
         let escape = just('\\').ignore_then(choice((
