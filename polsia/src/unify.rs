@@ -273,7 +273,52 @@ fn unify_tree_inner(
 
 pub fn unify_tree(value: &SpannedValue) -> Result<SpannedValue, UnifyError> {
     let mut root: BTreeMap<String, SpannedValue> = BTreeMap::new();
-    unify_tree_inner(value, "", &mut root, true)
+    let unified = unify_tree_inner(value, "", &mut root, true)?;
+    resolve_refs(&unified, "", &root)
+}
+
+fn resolve_refs(
+    value: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+) -> Result<SpannedValue, UnifyError> {
+    match &value.kind {
+        ValueKind::Reference(p) => match lookup(root, p) {
+            Some(v) => resolve_refs(v, path, root),
+            None => Err(UnifyError {
+                msg: add_path(path, format!("unresolved reference {}", p)),
+                span: value.span,
+                prev_span: value.span,
+            }),
+        },
+        ValueKind::Array(items) => {
+            let mut out = Vec::new();
+            for item in items {
+                out.push(resolve_refs(item, path, root)?);
+            }
+            Ok(SpannedValue {
+                span: value.span,
+                kind: ValueKind::Array(out),
+            })
+        }
+        ValueKind::Object(members) => {
+            let mut out = Vec::new();
+            for (k, v, span) in members {
+                let new_path = if path.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{}.{}", path, k)
+                };
+                let resolved = resolve_refs(v, &new_path, root)?;
+                out.push((k.clone(), resolved, *span));
+            }
+            Ok(SpannedValue {
+                span: value.span,
+                kind: ValueKind::Object(out),
+            })
+        }
+        _ => Ok(value.clone()),
+    }
 }
 
 fn value_to_kind(j: Value) -> ValueKind {
