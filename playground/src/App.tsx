@@ -62,7 +62,6 @@ function App() {
   const [power, setPower] = useState<'low' | 'medium' | 'high'>('medium')
   const [output, setOutput] = useState('Loading...')
   const [src, setSrc] = useState(DEFAULT_SRC)
-  const statusRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -125,7 +124,6 @@ function App() {
               update(v)
             }}
           />
-          <div ref={statusRef} id="status" className="status"></div>
         </div>
         <div className="output">
           <div className="section-header">
