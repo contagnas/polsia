@@ -1,4 +1,4 @@
-use crate::{parser, unify_tree};
+use crate::{apply_directives_spanned, document, unify_tree};
 use ariadne::{Color, Config, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -31,10 +31,11 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
 #[wasm_bindgen]
 pub fn polsia_to_json(src: &str) -> Result<String, String> {
     let filename = "input".to_string();
-    let parse_result = parser().parse(src).into_result();
+    let parse_result = document().parse(src).into_result();
     match parse_result {
-        Ok(ast) => match unify_tree(&ast) {
-            Ok(value) => {
+        Ok(doc) => match unify_tree(&doc.value) {
+            Ok(mut value) => {
+                apply_directives_spanned(&mut value, &doc.directives);
                 if let Some((span, t)) = find_unresolved(&value) {
                     let msg = format!("value of type {:?} is unspecified", t);
                     let span_range = span.into_range();
