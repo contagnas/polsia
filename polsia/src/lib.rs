@@ -2,8 +2,11 @@ pub mod parser;
 pub mod types;
 pub mod unify;
 
-pub use parser::parser;
-pub use types::{SpannedValue, ValType, Value, ValueKind};
+pub use parser::{document, parser};
+pub use types::{
+    Directive, Document, SpannedValue, ValType, Value, ValueKind, apply_directives,
+    apply_directives_spanned,
+};
 pub use unify::{UnifyError, unify, unify_spanned, unify_tree, unify_with_path};
 
 #[cfg(feature = "wasm")]
@@ -435,5 +438,43 @@ mod tests {
         let unified = unify_tree(&parsed).unwrap();
         let json = unified.to_value().to_pretty_string();
         assert!(!json.is_empty());
+    }
+
+    #[test]
+    fn noexport_removes_field() {
+        let src = "foo: 1\nbar: 2\nnoexport bar";
+        let doc = document().parse(src).into_result().unwrap();
+        let unified = unify_tree(&doc.value).unwrap();
+        let val = apply_directives(unified.to_value(), &doc.directives);
+        assert_eq!(val, Value::Object(vec![("foo".into(), Value::Int(1))]));
+    }
+
+    #[test]
+    fn noexport_with_type_allows_export() {
+        let src = r#"
+            # unexported types don't break json
+            noexport creature
+            creature: {
+              name: String
+              age: Int
+            }
+
+            forest: creature
+            forest: name: "forest"
+            forest: age: 4
+        "#;
+        let doc = document().parse(src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_directives_spanned(&mut unified, &doc.directives);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "forest".into(),
+                Value::Object(vec![
+                    ("age".into(), Value::Int(4)),
+                    ("name".into(), Value::String("forest".into())),
+                ]),
+            ),])
+        );
     }
 }

@@ -1,8 +1,8 @@
-use crate::types::{Span, SpannedValue, ValType, ValueKind};
+use crate::types::{Directive, Document, Span, SpannedValue, ValType, ValueKind};
 use chumsky::prelude::*;
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 
-pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
+pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, char>>> {
     let value = spanned_value();
 
     let comment = just('#')
@@ -52,19 +52,76 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a
             (k, v, span)
         });
 
+    let reference = text::ident()
+        .separated_by(just('.'))
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .map(|parts: Vec<&str>| parts.join("."))
+        .filter(|s: &String| {
+            !matches!(
+                s.as_str(),
+                "null"
+                    | "true"
+                    | "false"
+                    | "Any"
+                    | "Nothing"
+                    | "Int"
+                    | "Number"
+                    | "Rational"
+                    | "Float"
+                    | "String"
+            )
+        });
+
+    let directive = just("noexport")
+        .padded_by(ws)
+        .ignore_then(reference)
+        .map(Directive::NoExport);
+
+    #[derive(Debug)]
+    enum Item {
+        Member((String, SpannedValue, Span)),
+        Directive(Directive),
+    }
+
     let comma = just(',').then_ignore(ws).ignored();
-    let top_object = member
+    let item = choice((directive.map(Item::Directive), member.map(Item::Member)));
+    let top_object = item
         .separated_by(choice((comma, ws1)))
         .allow_trailing()
         .at_least(1)
         .collect::<Vec<_>>()
-        .map(|members| members)
-        .map_with(|members, e| SpannedValue {
-            span: e.span(),
-            kind: ValueKind::Object(members),
+        .map_with(|items, e| {
+            let mut members = Vec::new();
+            let mut directives = Vec::new();
+            for i in items {
+                match i {
+                    Item::Member(m) => members.push(m),
+                    Item::Directive(d) => directives.push(d),
+                }
+            }
+            Document {
+                value: SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Object(members),
+                },
+                directives,
+            }
         });
 
-    choice((top_object, value)).padded_by(ws).map(|v| v)
+    choice((
+        top_object,
+        value.map(|v| Document {
+            value: v,
+            directives: Vec::new(),
+        }),
+    ))
+    .padded_by(ws)
+    .map(|d| d)
+}
+
+pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
+    document().map(|d| d.value)
 }
 
 fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {

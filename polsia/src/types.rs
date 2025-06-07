@@ -17,6 +17,17 @@ pub enum Value {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Directive {
+    NoExport(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Document {
+    pub value: SpannedValue,
+    pub directives: Vec<Directive>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SpannedValue {
     pub span: Span,
     pub kind: ValueKind,
@@ -88,4 +99,57 @@ pub enum ValType {
     Rational,
     Float,
     String,
+}
+
+fn remove_path(value: &mut Value, parts: &[&str]) {
+    if parts.is_empty() {
+        return;
+    }
+    if let Value::Object(members) = value {
+        if let Some(pos) = members.iter().position(|(k, _)| k == parts[0]) {
+            if parts.len() == 1 {
+                members.remove(pos);
+            } else {
+                remove_path(&mut members[pos].1, &parts[1..]);
+            }
+        }
+    }
+}
+
+pub fn apply_directives(mut value: Value, directives: &[Directive]) -> Value {
+    for d in directives {
+        match d {
+            Directive::NoExport(path) => {
+                let parts: Vec<&str> = path.split('.').collect();
+                remove_path(&mut value, &parts);
+            }
+        }
+    }
+    value
+}
+
+fn remove_path_spanned(value: &mut SpannedValue, parts: &[&str]) {
+    if parts.is_empty() {
+        return;
+    }
+    if let ValueKind::Object(members) = &mut value.kind {
+        if let Some(pos) = members.iter().position(|(k, _, _)| k == parts[0]) {
+            if parts.len() == 1 {
+                members.remove(pos);
+            } else {
+                remove_path_spanned(&mut members[pos].1, &parts[1..]);
+            }
+        }
+    }
+}
+
+pub fn apply_directives_spanned(value: &mut SpannedValue, directives: &[Directive]) {
+    for d in directives {
+        match d {
+            Directive::NoExport(path) => {
+                let parts: Vec<&str> = path.split('.').collect();
+                remove_path_spanned(value, &parts);
+            }
+        }
+    }
 }

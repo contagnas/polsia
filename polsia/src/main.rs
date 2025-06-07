@@ -1,7 +1,7 @@
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use polsia::types::Span;
-use polsia::{SpannedValue, ValType, ValueKind, parser, unify_tree};
+use polsia::{SpannedValue, ValType, ValueKind, apply_directives_spanned, document, unify_tree};
 use std::{env, fs};
 
 fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
@@ -30,10 +30,11 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
 fn main() {
     let filename = env::args().nth(1).expect("expected file argument");
     let src = fs::read_to_string(&filename).expect("failed to read file");
-    let parse_result = parser().parse(&src).into_result();
+    let parse_result = document().parse(&src).into_result();
     match parse_result {
-        Ok(ast) => match unify_tree(&ast) {
-            Ok(value) => {
+        Ok(doc) => match unify_tree(&doc.value) {
+            Ok(mut value) => {
+                apply_directives_spanned(&mut value, &doc.directives);
                 if let Some((span, t)) = find_unresolved(&value) {
                     let msg = format!("value of type {:?} is unspecified", t);
                     let span_range = span.into_range();
