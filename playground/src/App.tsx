@@ -14,7 +14,11 @@ const DEFAULT_SRC = demoSrc
 
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
-  const [power, setPower] = useState<'low' | 'medium' | 'high'>('medium')
+  const [power, setPower] = useState<'low' | 'medium' | 'high'>(() => {
+    const saved = localStorage.getItem('editor-power')
+    if (saved === 'low' || saved === 'medium' || saved === 'high') return saved as any
+    return 'medium'
+  })
   const [output, setOutput] = useState('Loading...')
   const [src, setSrc] = useState(DEFAULT_SRC)
 
@@ -60,7 +64,11 @@ function App() {
               power level:
               <select
                 value={power}
-                onChange={(e) => setPower(e.target.value as any)}
+                onChange={(e) => {
+                  const val = e.target.value as 'low' | 'medium' | 'high'
+                  setPower(val)
+                  localStorage.setItem('editor-power', val)
+                }}
               >
                 <option value="low">low (emacs)</option>
                 <option value="medium">medium (basic)</option>
