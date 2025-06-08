@@ -478,4 +478,69 @@ mod tests {
             ),])
         );
     }
+
+    #[test]
+    fn list_unify_type_value() {
+        let src = "anInt: [Int]\nanInt: [3]";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn list_unify_any() {
+        let src = "anInt: [Any]\nanInt: [3]";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn list_unify_with_refs() {
+        let src = r#"
+            myType: Int
+            myInts: [Int, myType]
+            myInts: [Int, Int]
+            myInts: [3, Int]
+            myInts: [myType, 3]
+            myInts: [3, 3]
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn list_reference_unifies() {
+        let src = r#"
+            twoints: [Int, Int]
+            couple3s: twoints
+            couple3s: [3, 3]
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn list_reference_values() {
+        let src = r#"
+            foo: "bar"
+            bar: "bar"
+            baz: [bar]
+            baz: [foo]
+        "#;
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_ok());
+    }
+
+    #[test]
+    fn list_type_mismatch_fails() {
+        let src = "foo: [Int]\nfoo: [\"hello\"]";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_err());
+    }
+
+    #[test]
+    fn list_length_mismatch_fails() {
+        let src = "foo: [Int]\nfoo: [1, 2]";
+        let parsed = parser().parse(src).into_result().unwrap();
+        assert!(unify_tree(&parsed).is_err());
+    }
 }

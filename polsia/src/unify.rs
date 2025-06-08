@@ -182,6 +182,29 @@ pub fn unify_spanned(
                 prev_span: a.span,
             }),
         },
+        (ValueKind::Array(a_items), ValueKind::Array(b_items)) => {
+            if a_items.len() != b_items.len() {
+                return Err(UnifyError {
+                    msg: add_path(path, "array lengths differ".into()),
+                    span: b.span,
+                    prev_span: a.span,
+                });
+            }
+            let mut out = Vec::new();
+            for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
+                let new_path = if path.is_empty() {
+                    format!("[{}]", i)
+                } else {
+                    format!("{}[{}]", path, i)
+                };
+                let unified = unify_spanned(av, bv, &new_path, root)?;
+                out.push(unified);
+            }
+            Ok(SpannedValue {
+                span: b.span,
+                kind: ValueKind::Array(out),
+            })
+        }
         (ValueKind::Object(a_members), ValueKind::Object(b_members)) => {
             use std::collections::BTreeMap;
             let mut map: BTreeMap<String, SpannedValue> = BTreeMap::new();
@@ -391,6 +414,22 @@ pub fn unify_with_path(a: &Value, b: &Value, path: &str) -> Result<Value, String
             .map_err(|e| add_path(path, e)),
         (Value::Type(t), val) | (val, Value::Type(t)) => {
             unify_type_value(t, val).map_err(|e| add_path(path, e))
+        }
+        (Value::Array(a_items), Value::Array(b_items)) => {
+            if a_items.len() != b_items.len() {
+                return Err(add_path(path, "array lengths differ".into()));
+            }
+            let mut out = Vec::new();
+            for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
+                let new_path = if path.is_empty() {
+                    format!("[{}]", i)
+                } else {
+                    format!("{}[{}]", path, i)
+                };
+                let unified = unify_with_path(av, bv, &new_path)?;
+                out.push(unified);
+            }
+            Ok(Value::Array(out))
         }
         (Value::Object(a_members), Value::Object(b_members)) => {
             use std::collections::BTreeMap;
