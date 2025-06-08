@@ -18,6 +18,7 @@ fn type_name(t: &ValType) -> &'static str {
         ValType::Rational => "Rational",
         ValType::Float => "Float",
         ValType::String => "String",
+        ValType::Boolean => "Boolean",
     }
 }
 
@@ -79,6 +80,11 @@ fn unify_type_value(t: &ValType, val: &Value) -> Result<Value, String> {
             Value::String(s) => Ok(Value::String(s.clone())),
             Value::Type(other) => unify_types(t, other).map(Value::Type),
             _ => Err("expected string".into()),
+        },
+        ValType::Boolean => match val {
+            Value::Bool(b) => Ok(Value::Bool(*b)),
+            Value::Type(other) => unify_types(t, other).map(Value::Type),
+            _ => Err("expected boolean".into()),
         },
     }
 }

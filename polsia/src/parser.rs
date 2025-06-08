@@ -70,6 +70,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
                     | "Rational"
                     | "Float"
                     | "String"
+                    | "Boolean"
             )
         });
 
@@ -282,6 +283,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                         | "Rational"
                         | "Float"
                         | "String"
+                        | "Boolean"
                 )
             })
             .map_with(|s: String, e| SpannedValue {
@@ -329,6 +331,10 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             just("String").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::String),
+            }),
+            just("Boolean").map_with(|_, e| SpannedValue {
+                span: e.span(),
+                kind: ValueKind::Type(ValType::Boolean),
             }),
             number,
             string,
