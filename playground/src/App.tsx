@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { pythonLanguage } from '@codemirror/lang-python'
+import { yaml } from '@codemirror/lang-yaml'
 import { json } from '@codemirror/lang-json'
 import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
@@ -32,7 +32,7 @@ function App() {
     }
   }
 
-  const extensions: Extension[] = [pythonLanguage]
+  const extensions: Extension[] = [yaml()]
   if (power === 'high') {
     extensions.unshift(
       vim({ status: true } as any)
