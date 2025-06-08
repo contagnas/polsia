@@ -20,6 +20,19 @@ mod tests {
     use super::*;
     use chumsky::prelude::*;
 
+    fn parse_unify(src: &str) -> Result<SpannedValue, UnifyError> {
+        let parsed = parser().parse(src).into_result().unwrap();
+        unify_tree(&parsed)
+    }
+
+    fn must_unify(src: &str) -> SpannedValue {
+        parse_unify(src).unwrap()
+    }
+
+    fn must_err(src: &str) {
+        assert!(parse_unify(src).is_err());
+    }
+
     #[test]
     fn array_with_trailing_comma_and_comments() {
         let src = r#"
@@ -29,8 +42,7 @@ mod tests {
                 3,# comment
             ]
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Array(vec![Value::Int(1), Value::Int(2), Value::Int(3)])
@@ -46,8 +58,7 @@ mod tests {
                 "b": [false,],
             }
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![
@@ -65,8 +76,7 @@ mod tests {
                 b: { c: 2, },
             }
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![
@@ -79,8 +89,7 @@ mod tests {
     #[test]
     fn object_with_duplicate_keys_equal() {
         let src = r#"{ "a": 1, "a": 1 }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![("a".into(), Value::Int(1))])
@@ -90,50 +99,43 @@ mod tests {
     #[test]
     fn object_with_duplicate_keys_different() {
         let src = r#"{ "a": 1, "a": 2 }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        must_err(src);
     }
 
     #[test]
     fn unify_type_with_value() {
         let src = r#"{ "a": Int, "a": 1 }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
     fn unify_type_with_incompatible_value() {
         let src = r#"{ "a": Int, "a": 1.1 }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        must_err(src);
     }
 
     #[test]
     fn unify_any_with_value() {
         let src = r#"{ "a": Any, "a": 1 }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
     fn unify_nothing_with_value() {
         let src = r#"{ "a": Nothing, "a": 1 }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        must_err(src);
     }
 
     #[test]
     fn unify_number_hierarchy() {
         let src = r#"{ "a": Int, "a": Float }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
     fn unify_string_with_value() {
         let src = r#"{ "a": String, "a": "hi" }"#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
@@ -144,8 +146,7 @@ mod tests {
                 foo: { bar: 3 },
             }
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
@@ -156,8 +157,7 @@ mod tests {
                 foo: { baz: 2 },
             }
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
@@ -184,8 +184,7 @@ mod tests {
     #[test]
     fn duplicate_key_error_details() {
         let src = "{\n    hello: Int,\n    hello: String,\n}";
-        let parsed = parser().parse(src).into_result().unwrap();
-        match unify_tree(&parsed) {
+        match parse_unify(src) {
             Ok(_) => panic!("expected error"),
             Err(err) => {
                 use chumsky::error::LabelError;
@@ -215,8 +214,7 @@ mod tests {
                 foo: { bar: Int },
             }
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        match unify_tree(&parsed) {
+        match parse_unify(src) {
             Ok(_) => panic!("expected error"),
             Err(err) => {
                 use chumsky::error::LabelError;
@@ -245,18 +243,15 @@ mod tests {
                 foo: { baz: String },
             }
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        must_err(src);
     }
 
     #[test]
     fn top_level_braces_optional() {
         let with_braces = "{ foo: 1, bar: 2, }";
         let without_braces = "foo: 1,\nbar: 2,\n";
-        let a = parser().parse(with_braces).into_result().unwrap();
-        let a = unify_tree(&a).unwrap();
-        let b = parser().parse(without_braces).into_result().unwrap();
-        let b = unify_tree(&b).unwrap();
+        let a = must_unify(with_braces);
+        let b = must_unify(without_braces);
         assert_eq!(a.to_value(), b.to_value());
     }
 
@@ -268,8 +263,7 @@ mod tests {
             .into_result()
             .unwrap();
         let expected = unify_tree(&expected).unwrap();
-        let parsed = parser().parse(src).into_result().unwrap();
-        let parsed = unify_tree(&parsed).unwrap();
+        let parsed = must_unify(src);
         assert_eq!(parsed.to_value(), expected.to_value());
     }
 
@@ -277,18 +271,15 @@ mod tests {
     fn object_commas_optional() {
         let with_commas = "foo: 1,\nbar: 2,\n";
         let without_commas = "foo: 1\nbar: 2\n";
-        let a = parser().parse(with_commas).into_result().unwrap();
-        let a = unify_tree(&a).unwrap();
-        let b = parser().parse(without_commas).into_result().unwrap();
-        let b = unify_tree(&b).unwrap();
+        let a = must_unify(with_commas);
+        let b = must_unify(without_commas);
         assert_eq!(a.to_value(), b.to_value());
     }
 
     #[test]
     fn chain_with_duplicate_keys_no_commas() {
         let src = "foo: bar: 1\nfoo: baz: 2\n";
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -304,8 +295,7 @@ mod tests {
     #[test]
     fn unify_type_is_overwritten_by_value() {
         let src = "company: founded: Int\ncompany: founded: 1985\n";
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -327,8 +317,7 @@ mod tests {
             meadow: name: "meadow"
             meadow: age: 4
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![
@@ -360,15 +349,13 @@ mod tests {
             forest: name: "forest"
             forest: age: "old"
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        must_err(src);
     }
 
     #[test]
     fn unresolved_reference_fails() {
         let src = "hello: world";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        must_err(src);
     }
 
     #[test]
@@ -377,8 +364,7 @@ mod tests {
             greet: "world"
             hello: greet
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![
@@ -391,8 +377,7 @@ mod tests {
     #[test]
     fn parse_int_and_float_values() {
         let src = "my_int: 1\nmy_float: 3.1415";
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![
@@ -404,30 +389,31 @@ mod tests {
 
     #[test]
     fn int_type_chain_parses() {
-        let src = "my_int: Float\nmy_int: 1";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        let src = r"my_int: Float
+my_int: 1";
+        must_unify(src);
     }
 
     #[test]
     fn int_type_chain_with_number_unifies() {
-        let src = "my_int: Number\nmy_int: Float\nmy_int: 1";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        let src = r"my_int: Number
+my_int: Float
+my_int: 1";
+        must_unify(src);
     }
 
     #[test]
     fn float_type_chain_unifies() {
-        let src = "my_float: Number\nmy_float: Float\nmy_float: 3.1415";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        let src = r"my_float: Number
+my_float: Float
+my_float: 3.1415";
+        must_unify(src);
     }
 
     #[test]
     fn int_exports_without_decimal() {
         let src = "1";
-        let parsed = parser().parse(src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let unified = must_unify(src);
         assert_eq!(unified.to_value().to_pretty_string(), "1");
     }
 
@@ -481,16 +467,20 @@ mod tests {
 
     #[test]
     fn list_unify_type_value() {
-        let src = "anInt: [Int]\nanInt: [3]";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        let src = r#"
+anInt: [Int]
+anInt: [3]
+"#;
+        must_unify(src);
     }
 
     #[test]
     fn list_unify_any() {
-        let src = "anInt: [Any]\nanInt: [3]";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        let src = r#"
+anInt: [Any]
+anInt: [3]
+"#;
+        must_unify(src);
     }
 
     #[test]
@@ -503,8 +493,7 @@ mod tests {
             myInts: [myType, 3]
             myInts: [3, 3]
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
@@ -514,8 +503,7 @@ mod tests {
             couple3s: twoints
             couple3s: [3, 3]
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
@@ -526,21 +514,24 @@ mod tests {
             baz: [bar]
             baz: [foo]
         "#;
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_ok());
+        must_unify(src);
     }
 
     #[test]
     fn list_type_mismatch_fails() {
-        let src = "foo: [Int]\nfoo: [\"hello\"]";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        let src = r#"
+foo: [Int]
+foo: ["hello"]
+"#;
+        must_err(src);
     }
 
     #[test]
     fn list_length_mismatch_fails() {
-        let src = "foo: [Int]\nfoo: [1, 2]";
-        let parsed = parser().parse(src).into_result().unwrap();
-        assert!(unify_tree(&parsed).is_err());
+        let src = r#"
+foo: [Int]
+foo: [1, 2]
+"#;
+        must_err(src);
     }
 }
