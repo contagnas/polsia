@@ -99,6 +99,7 @@ pub enum ValType {
     Rational,
     Float,
     String,
+    Boolean,
 }
 
 fn remove_path(value: &mut Value, parts: &[&str]) {

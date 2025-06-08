@@ -28,7 +28,7 @@ simple_string: "string"
 simple_string: "string"
 
 # Polsia has types. Types are values which unify with values of that type.
-# Built-in types: Any, Nothing, Int, Number, Rational, Float, String
+# Built-in types: Any, Nothing, Int, Number, Rational, Float, String, Boolean
 funny_number: Int
 funny_number: 69
 

@@ -9,7 +9,7 @@ Polsia is a small experimental data language parser written in Rust using the [c
 - unquoted identifiers as keys
 - optional commas and braces for single objects
 - chained keys like `foo: bar: 1` for nested objects
-- basic type annotations (`Int`, `Float`, `String`, `Any`, `Nothing`)
+- basic type annotations (`Int`, `Float`, `String`, `Boolean`, `Any`, `Nothing`)
 
 ## Examples
 
