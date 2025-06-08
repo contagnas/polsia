@@ -434,8 +434,9 @@ mod tests {
     #[test]
     fn demo_file_parses_to_json() {
         let src = std::fs::read_to_string("../examples/demo.pls").unwrap();
-        let parsed = parser().parse(&src).into_result().unwrap();
-        let unified = unify_tree(&parsed).unwrap();
+        let doc = document().parse(&src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_directives_spanned(&mut unified, &doc.directives);
         let json = unified.to_value().to_pretty_string();
         assert!(!json.is_empty());
     }
