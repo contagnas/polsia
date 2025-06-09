@@ -1,12 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="256" height="256" viewBox="0 0 256 256">
   <defs>
-    <clipPath id="round">
+    <!-- 64×64px tile, offset so a dot falls at (128,128), rotated 45° -->
+    <pattern id="gridPattern"
+             x="32" y="32"
+             width="64" height="64"
+             patternUnits="userSpaceOnUse"
+             patternTransform="rotate(45 32 32)">
+      <!-- background -->
+      <rect width="64" height="64" fill="pink" />
+      <!-- horizontal bar (12px high) -->
+      <rect x="0" y="26" width="64" height="12" fill="#898" />
+      <!-- vertical bar (12px wide) -->
+      <rect x="26" y="0" width="12" height="64" fill="#898" />
+      <!-- dot at the intersection -->
+      <circle cx="32" cy="32" r="10" fill="green" />
+    </pattern>
+
+    <!-- clip everything to a 128px-radius circle -->
+    <clipPath id="clipCircle">
       <circle cx="128" cy="128" r="128" />
     </clipPath>
   </defs>
-  <circle cx="128" cy="128" r="128" fill="white" />
-  <g clip-path="url(#round)" stroke="black" stroke-width="16">
-    <path d="M0 64h256M0 128h256M0 192h256" />
-    <path d="M64 0v256M128 0v256M192 0v256" />
-  </g>
+
+  <!-- fill the canvas, then clip to round -->
+  <rect width="256" height="256"
+        fill="url(#gridPattern)"
+        clip-path="url(#clipCircle)" />
 </svg>
