@@ -1,12 +1,20 @@
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use polsia::types::Span;
-use polsia::{SpannedValue, ValType, ValueKind, apply_directives_spanned, document, unify_tree};
+use polsia::{SpannedValue, ValueKind, apply_directives_spanned, document, unify_tree};
 use std::{env, fs};
 
-fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
+fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
     match &value.kind {
-        ValueKind::Type(t) => Some((value.span, t.clone())),
+        ValueKind::Type(t) => Some((value.span, format!("{:?}", t))),
+        ValueKind::Union(items) => {
+            for item in items {
+                if let Some(res) = find_unresolved(item) {
+                    return Some(res);
+                }
+            }
+            Some((value.span, "union".into()))
+        }
         ValueKind::Array(items) => {
             for item in items {
                 if let Some(res) = find_unresolved(item) {
@@ -36,7 +44,7 @@ fn main() {
             Ok(mut value) => {
                 apply_directives_spanned(&mut value, &doc.directives);
                 if let Some((span, t)) = find_unresolved(&value) {
-                    let msg = format!("value of type {:?} is unspecified", t);
+                    let msg = format!("value of type {} is unspecified", t);
                     let span_range = span.into_range();
                     Report::build(ReportKind::Error, (filename.clone(), span_range.clone()))
                         .with_message(&msg)

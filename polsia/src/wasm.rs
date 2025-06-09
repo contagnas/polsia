@@ -3,11 +3,19 @@ use ariadne::{Color, Config, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
 
-use crate::{SpannedValue, ValType, ValueKind, types::Span};
+use crate::{SpannedValue, ValueKind, types::Span};
 
-fn find_unresolved(value: &SpannedValue) -> Option<(Span, ValType)> {
+fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
     match &value.kind {
-        ValueKind::Type(t) => Some((value.span, t.clone())),
+        ValueKind::Type(t) => Some((value.span, format!("{:?}", t))),
+        ValueKind::Union(items) => {
+            for item in items {
+                if let Some(res) = find_unresolved(item) {
+                    return Some(res);
+                }
+            }
+            Some((value.span, "union".into()))
+        }
         ValueKind::Array(items) => {
             for item in items {
                 if let Some(res) = find_unresolved(item) {
@@ -37,7 +45,7 @@ pub fn polsia_to_json(src: &str) -> Result<String, String> {
             Ok(mut value) => {
                 apply_directives_spanned(&mut value, &doc.directives);
                 if let Some((span, t)) = find_unresolved(&value) {
-                    let msg = format!("value of type {:?} is unspecified", t);
+                    let msg = format!("value of type {} is unspecified", t);
                     let span_range = span.into_range();
                     let mut buf = Vec::new();
                     Report::build(ReportKind::Error, (filename.clone(), span_range.clone()))

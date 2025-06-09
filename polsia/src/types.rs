@@ -14,6 +14,7 @@ pub enum Value {
     Object(Vec<(String, Value)>),
     Reference(String),
     Type(ValType),
+    Union(Vec<Value>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +45,7 @@ pub enum ValueKind {
     Object(Vec<(String, SpannedValue, Span)>),
     Reference(String),
     Type(ValType),
+    Union(Vec<SpannedValue>),
 }
 
 impl SpannedValue {
@@ -62,6 +64,7 @@ impl SpannedValue {
             ),
             ValueKind::Reference(r) => Value::Reference(r.clone()),
             ValueKind::Type(t) => Value::Type(t.clone()),
+            ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
         }
     }
 }
@@ -82,6 +85,7 @@ impl Value {
             }
             Value::Reference(r) => JsValue::String(r.clone()),
             Value::Type(t) => panic!("unresolved type {:?}", t),
+            Value::Union(_) => panic!("unresolved union"),
         }
     }
 

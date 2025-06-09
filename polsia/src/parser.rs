@@ -291,7 +291,7 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                 kind: ValueKind::Reference(s),
             });
 
-        choice((
+        let atom = choice((
             just("null").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Null,
@@ -342,6 +342,18 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             object,
             chain,
             reference,
-        ))
+        ));
+
+        let union = atom
+            .clone()
+            .separated_by(just('|').padded_by(ws))
+            .at_least(2)
+            .collect()
+            .map_with(|vals, e| SpannedValue {
+                span: e.span(),
+                kind: ValueKind::Union(vals),
+            });
+
+        choice((union, atom))
     })
 }
