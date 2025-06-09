@@ -1,6 +1,6 @@
 import { json } from '@codemirror/lang-json'
 import CodeMirror from '@uiw/react-codemirror'
-import { consoleDark } from '@uiw/codemirror-theme-console'
+import { miamiVice } from '../cmMiamiVice'
 import type { FC } from 'react'
 
 interface Props {
@@ -15,10 +15,10 @@ const OutputPane: FC<Props> = ({ theme, output }) => (
     </div>
     <CodeMirror
       className="flex-1 box-border overflow-auto"
-      theme={theme === 'dark' ? consoleDark : 'light'}
+      theme={theme === 'dark' ? miamiVice : 'light'}
       height="100%"
       value={output}
-      extensions={[json()]}
+      extensions={theme === 'dark' ? [json(), ...miamiVice] : [json()]}
       editable={false}
     />
   </div>

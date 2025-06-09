@@ -1,6 +1,6 @@
 import CodeMirror from '@uiw/react-codemirror'
-import { consoleDark } from '@uiw/codemirror-theme-console'
 import type { Extension } from '@codemirror/state'
+import { miamiVice } from '../cmMiamiVice'
 import type { FC } from 'react'
 
 interface Props {
@@ -71,10 +71,10 @@ const EditorPane: FC<Props> = ({
     </div>
     <CodeMirror
       className="flex-1 box-border overflow-auto"
-      theme={theme === 'dark' ? consoleDark : 'light'}
+      theme={theme === 'dark' ? miamiVice : 'light'}
       height="100%"
       value={src}
-      extensions={extensions}
+      extensions={theme === 'dark' ? [...miamiVice, ...extensions] : extensions}
       onChange={onChange}
     />
   </div>
