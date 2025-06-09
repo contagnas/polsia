@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
-import { yaml } from '@codemirror/lang-yaml'
+import { polsia } from './polsia'
 import { json } from '@codemirror/lang-json'
 import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
@@ -36,7 +36,7 @@ function App() {
     }
   }
 
-  const extensions: Extension[] = [yaml()]
+  const extensions: Extension[] = [polsia()]
   if (power === 'high') {
     extensions.unshift(
       vim({ status: true } as any)
