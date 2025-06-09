@@ -630,4 +630,20 @@ baz: { baz: 3 }
 "#;
         must_err(src);
     }
+
+    #[test]
+    fn reference_name_starts_with_type() {
+        let src = r#"
+StringCheese: "stringy"
+snack: StringCheese
+"#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                ("StringCheese".into(), Value::String("stringy".into())),
+                ("snack".into(), Value::String("stringy".into())),
+            ])
+        );
+    }
 }
