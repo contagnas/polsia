@@ -74,7 +74,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
             )
         });
 
-    let directive = just("noexport")
+    let directive = text::keyword("noexport")
         .padded_by(ws)
         .ignore_then(reference)
         .map(Directive::NoExport);
@@ -292,47 +292,47 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             });
 
         let atom = choice((
-            just("null").map_with(|_, e| SpannedValue {
+            text::keyword("null").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Null,
             }),
-            just("true").map_with(|_, e| SpannedValue {
+            text::keyword("true").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Bool(true),
             }),
-            just("false").map_with(|_, e| SpannedValue {
+            text::keyword("false").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Bool(false),
             }),
-            just("Any").map_with(|_, e| SpannedValue {
+            text::keyword("Any").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Any),
             }),
-            just("Nothing").map_with(|_, e| SpannedValue {
+            text::keyword("Nothing").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Nothing),
             }),
-            just("Int").map_with(|_, e| SpannedValue {
+            text::keyword("Int").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Int),
             }),
-            just("Number").map_with(|_, e| SpannedValue {
+            text::keyword("Number").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Number),
             }),
-            just("Rational").map_with(|_, e| SpannedValue {
+            text::keyword("Rational").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Rational),
             }),
-            just("Float").map_with(|_, e| SpannedValue {
+            text::keyword("Float").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Float),
             }),
-            just("String").map_with(|_, e| SpannedValue {
+            text::keyword("String").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::String),
             }),
-            just("Boolean").map_with(|_, e| SpannedValue {
+            text::keyword("Boolean").map_with(|_, e| SpannedValue {
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Boolean),
             }),
