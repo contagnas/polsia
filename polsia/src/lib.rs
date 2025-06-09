@@ -466,6 +466,32 @@ my_float: 3.1415";
     }
 
     #[test]
+    fn noexport_sum_type_exportable() {
+        let src = r#"
+            noexport Foo
+            noexport Bar
+            noexport FooOrBar
+
+            Foo: foo: Int
+            Bar: bar: String
+            FooOrBar: Foo | Bar
+
+            baz: FooOrBar
+            baz: bar: ""
+        "#;
+        let doc = document().parse(src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_directives_spanned(&mut unified, &doc.directives);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "baz".into(),
+                Value::Object(vec![("bar".into(), Value::String("".into()))]),
+            )])
+        );
+    }
+
+    #[test]
     fn list_unify_type_value() {
         let src = r#"
 anInt: [Int]
@@ -531,6 +557,76 @@ foo: ["hello"]
         let src = r#"
 foo: [Int]
 foo: [1, 2]
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn sum_type_string_or_int_string() {
+        let src = r#"
+stringOrInt: String | Int
+stringOrInt: "hello"
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn sum_type_string_or_int_int() {
+        let src = r#"
+stringOrInt: String | Int
+stringOrInt: 3
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn sum_type_string_or_int_bool_fails() {
+        let src = r#"
+stringOrInt: String | Int
+stringOrInt: false
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn sum_type_nested_bool() {
+        let src = r#"
+stringOrInt: String | Int
+stringOrIntOrBool: stringOrInt | Boolean
+stringOrIntOrBool: false
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn sum_type_nested_int() {
+        let src = r#"
+stringOrInt: String | Int
+stringOrIntOrBool: stringOrInt | Boolean
+stringOrIntOrBool: 3
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn sum_type_object_union_unifies() {
+        let src = r#"
+FooOrBar: { foo: Any } | { bar: Any }
+foo: FooOrBar
+foo: { foo: 3 }
+
+bar: FooOrBar
+bar: { bar: 3 }
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn sum_type_object_union_fails() {
+        let src = r#"
+FooOrBar: { foo: Any } | { bar: Any }
+baz: FooOrBar
+baz: { baz: 3 }
 "#;
         must_err(src);
     }
