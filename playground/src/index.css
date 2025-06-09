@@ -29,13 +29,30 @@ html,
   margin-right: 1rem;
 }
 
-.power {
+.editor-select {
   margin: 4px;
 }
 
-.power select,
-.switcher {
-  margin-left: 0.5rem;
+.editor-select select,
+  .switcher {
+    margin-left: 0.5rem;
+    border: 1px solid currentColor;
+    background: inherit;
+    color: inherit;
+  }
+
+.example {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.example select {
+  margin: 0 4px;
+}
+
+.example button {
   border: 1px solid currentColor;
   background: inherit;
   color: inherit;
@@ -46,7 +63,7 @@ html,
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  gap: 8px;
+  gap: 4px;
 }
 
 .editor,

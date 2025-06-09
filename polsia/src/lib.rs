@@ -418,13 +418,19 @@ my_float: 3.1415";
     }
 
     #[test]
-    fn demo_file_parses_to_json() {
-        let src = std::fs::read_to_string("../examples/demo.pls").unwrap();
-        let doc = document().parse(&src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_directives_spanned(&mut unified, &doc.directives);
-        let json = unified.to_value().to_pretty_string();
-        assert!(!json.is_empty());
+    fn examples_parse_to_json() {
+        for entry in std::fs::read_dir("../examples").unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|s| s.to_str()) != Some("pls") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap();
+            let doc = document().parse(&src).into_result().unwrap();
+            let mut unified = unify_tree(&doc.value).unwrap();
+            apply_directives_spanned(&mut unified, &doc.directives);
+            let json = unified.to_value().to_pretty_string();
+            assert!(!json.is_empty());
+        }
     }
 
     #[test]

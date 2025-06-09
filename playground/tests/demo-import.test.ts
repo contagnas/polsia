@@ -1,7 +1,11 @@
 import { expect, test } from 'vitest'
-import demoSrc from '../../examples/demo.pls?raw'
+const modules = import.meta.glob('../../examples/*.pls', { eager: true, as: 'raw' }) as Record<string, string>
 
-test('demo source file loads', () => {
-  expect(typeof demoSrc).toBe('string')
-  expect(demoSrc.length).toBeGreaterThan(0)
+test('example source files load', () => {
+  const files = Object.values(modules)
+  expect(files.length).toBeGreaterThan(0)
+  for (const src of files) {
+    expect(typeof src).toBe('string')
+    expect(src.length).toBeGreaterThan(0)
+  }
 })
