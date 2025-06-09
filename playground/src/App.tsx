@@ -56,12 +56,10 @@ function App() {
   }
 
   const themeClasses =
-    theme === 'dark'
-      ? 'bg-black text-fuchsia-300'
-      : 'bg-yellow-100 text-fuchsia-500'
+    'bg-light-bg text-light-navy dark:bg-dark-bg dark:text-dark-cyan'
 
   return (
-    <div className={`flex flex-col h-full font-mono box-border overflow-hidden ${themeClasses}`}>
+    <div className={`flex flex-col h-full font-mono box-border overflow-hidden ${theme === 'dark' ? 'dark' : ''} ${themeClasses}`}>
       <Header theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden gap-1">
         <EditorPane

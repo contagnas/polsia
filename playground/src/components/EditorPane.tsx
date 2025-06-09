@@ -1,6 +1,6 @@
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
-import { vaporwave } from '../cmVaporwave'
+import { cmDark, cmLight } from '../cmTheme'
 import type { FC } from 'react'
 
 interface Props {
@@ -27,7 +27,7 @@ const EditorPane: FC<Props> = ({
   onChange,
 }) => (
   <div className="flex flex-col flex-1 overflow-hidden">
-    <div className="flex items-center justify-between p-1 border-b border-current h-6 flex-none">
+    <div className="flex items-center justify-between p-1 border-b border-current h-6 flex-none sticky top-0 z-10 bg-inherit">
       <div className="flex items-center mr-auto">
         <button
           className="border border-current bg-inherit text-inherit"
@@ -71,10 +71,10 @@ const EditorPane: FC<Props> = ({
     </div>
     <CodeMirror
       className="flex-1 box-border overflow-auto"
-      theme={theme === 'dark' ? vaporwave : 'light'}
+      theme={theme === 'dark' ? cmDark : cmLight}
       height="100%"
       value={src}
-      extensions={theme === 'dark' ? [...vaporwave, ...extensions] : extensions}
+      extensions={theme === 'dark' ? [...cmDark, ...extensions] : [...cmLight, ...extensions]}
       onChange={onChange}
     />
   </div>
