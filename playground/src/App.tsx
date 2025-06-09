@@ -57,7 +57,7 @@ function App() {
 
   const themeClasses =
     theme === 'dark'
-      ? 'bg-black text-cyan-300'
+      ? 'bg-black text-fuchsia-300'
       : 'bg-yellow-100 text-fuchsia-500'
 
   return (
