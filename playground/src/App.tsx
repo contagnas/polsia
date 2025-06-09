@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import CodeMirror from '@uiw/react-codemirror'
 import { polsia } from './polsia'
-import { json } from '@codemirror/lang-json'
 import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
 import type { Extension } from '@codemirror/state'
-import Marquee from 'react-fast-marquee'
-import './index.css'
 import * as wasm from 'polsia'
+import Header from './components/Header'
+import Footer from './components/Footer'
+import EditorPane from './components/EditorPane'
+import OutputPane from './components/OutputPane'
+
 const modules = import.meta.glob('../../examples/*.pls', { eager: true, as: 'raw' }) as Record<string, string>
 const examples = Object.entries(modules)
   .map(([path, code]) => [path.split('/').pop()!, code] as const)
@@ -28,14 +29,12 @@ function App() {
   const [src, setSrc] = useState(DEFAULT_SRC)
 
   useEffect(() => {
-    ;(async () => {
-      setOutput(wasm.polsia_to_json(src))
-    })()
+    setOutput(wasm.polsia_to_json(src))
   }, [])
 
-  function update(src: string) {
+  function update(code: string) {
     try {
-      setOutput(wasm.polsia_to_json(src))
+      setOutput(wasm.polsia_to_json(code))
     } catch (e) {
       setOutput('Error: ' + e)
     }
@@ -51,89 +50,40 @@ function App() {
 
   const extensions: Extension[] = [polsia()]
   if (editor === 'vim') {
-    extensions.unshift(
-      vim({ status: true } as any)
-    )
+    extensions.unshift(vim({ status: true } as any))
   } else if (editor === 'emacs') {
     extensions.unshift(emacs())
   }
 
+  const themeClasses =
+    theme === 'dark'
+      ? 'bg-black text-green-500'
+      : 'bg-yellow-100 text-fuchsia-500'
+
   return (
-    <div className={`app theme-${theme}`}>
-      <header className="header">
-        <span className="title">POLSIA</span>
-        <button
-          className="switcher"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        >
-          Switch to {theme === 'dark' ? 'light' : 'dark'}
-        </button>
-      </header>
-      <div className="content">
-        <div className="editor">
-          <div className="section-header">
-            <div className="example">
-              <button onClick={() => select(selected - 1)}>{'<'}</button>
-              <select
-                value={examples[selected][0]}
-                onChange={(e) => {
-                  const idx = examples.findIndex(([n]) => n === e.target.value)
-                  select(idx)
-                }}
-              >
-                {examples.map(([name]) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <button onClick={() => select(selected + 1)}>{'>'}</button>
-            </div>
-            <label className="editor-select">
-              Editor:
-              <select
-                value={editor}
-                onChange={(e) => {
-                  const val = e.target.value as 'basic' | 'vim' | 'emacs'
-                  setEditor(val)
-                  localStorage.setItem('editor', val)
-                }}
-              >
-                <option value="basic">Basic</option>
-                <option value="vim">Vim</option>
-                <option value="emacs">Em*cs</option>
-              </select>
-            </label>
-          </div>
-          <CodeMirror
-            className="pane"
-            theme={theme}
-            height="100%"
-            value={src}
-            extensions={extensions}
-            onChange={(v) => {
-              setSrc(v)
-              update(v)
-            }}
-          />
-        </div>
-        <div className="output">
-          <div className="section-header">
-            <span>JSON Output</span>
-          </div>
-          <CodeMirror
-            className="pane"
-            theme={theme}
-            height="100%"
-            value={output}
-            extensions={[json()]}
-            editable={false}
-          />
-        </div>
+    <div className={`flex flex-col h-full font-mono box-border overflow-hidden ${themeClasses}`}>
+      <Header theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden gap-1">
+        <EditorPane
+          theme={theme}
+          src={src}
+          examples={examples}
+          selected={selected}
+          onSelect={select}
+          editor={editor}
+          onEditorChange={(v) => {
+            setEditor(v)
+            localStorage.setItem('editor', v)
+          }}
+          extensions={extensions}
+          onChange={(v) => {
+            setSrc(v)
+            update(v)
+          }}
+        />
+        <OutputPane theme={theme} output={output} />
       </div>
-      <footer className="footer">
-        <Marquee autoFill>POLSIA &nbsp;</Marquee>
-      </footer>
+      <Footer />
     </div>
   )
 }

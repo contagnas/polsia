@@ -17,6 +17,7 @@
     "@replit/codemirror-emacs": "^6.1.0",
     "@replit/codemirror-vim": "^6.3.0",
     "@uiw/react-codemirror": "^4.23.12",
+    "@uiw/codemirror-theme-console": "^4.23.12",
     "polsia": "file:../polsia/pkg",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -39,6 +40,7 @@
     "vite": "^6.3.5",
     "vite-plugin-top-level-await": "^1.5.0",
     "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^1.5.0"
+    "vitest": "^1.5.0",
+    "@tailwindcss/vite": "^4.1.8"
   }
 }
