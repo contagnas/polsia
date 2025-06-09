@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <clipPath id="round">
+      <circle cx="128" cy="128" r="128" />
+    </clipPath>
+  </defs>
+  <circle cx="128" cy="128" r="128" fill="white" />
+  <g clip-path="url(#round)" stroke="black" stroke-width="16">
+    <path d="M0 64h256M0 128h256M0 192h256" />
+    <path d="M64 0v256M128 0v256M192 0v256" />
+  </g>
+</svg>
