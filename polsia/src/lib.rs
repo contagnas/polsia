@@ -662,4 +662,86 @@ snack: StringCheese
             ])
         );
     }
+
+    #[test]
+    fn unresolved_sum_type_not_exportable() {
+        let src = r#"
+noexport Dog
+Dog: {
+  species: "dog"
+  says: "bark"
+}
+
+noexport Cat
+Cat: {
+  species: "cat"
+  says: "meow"
+}
+
+noexport Pet
+Pet: Cat | Dog
+Pet: {
+  species: String
+  says: String
+}
+
+pet: Pet
+"#;
+        let doc = document().parse(src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_directives_spanned(&mut unified, &doc.directives);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let pet = members
+                    .iter()
+                    .find(|(k, _, _)| k == "pet")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert!(matches!(pet.kind, ValueKind::Union(_)));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn sum_type_resolves_when_fields_specified() {
+        let src = r#"
+noexport Dog
+Dog: {
+  species: "dog"
+  says: "bark"
+}
+
+noexport Cat
+Cat: {
+  species: "cat"
+  says: "meow"
+}
+
+noexport Pet
+Pet: Cat | Dog
+Pet: {
+  species: String
+  says: String
+}
+
+pet: Pet
+pet: species: "cat"
+pet: says: "meow"
+"#;
+        let doc = document().parse(src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_directives_spanned(&mut unified, &doc.directives);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "pet".into(),
+                Value::Object(vec![
+                    ("says".into(), Value::String("meow".into())),
+                    ("species".into(), Value::String("cat".into())),
+                ]),
+            )])
+        );
+    }
 }
