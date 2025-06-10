@@ -29,20 +29,23 @@ function App() {
     return 'basic'
   })
   const [output, setOutput] = useState('Loading...')
+  const [error, setError] = useState(false)
   const [selected, setSelected] = useState(DEFAULT_INDEX)
   const [src, setSrc] = useState(DEFAULT_SRC)
-
-  useEffect(() => {
-    setOutput(wasm.polsia_to_json(src))
-  }, [src])
 
   function update(code: string) {
     try {
       setOutput(wasm.polsia_to_json(code))
+      setError(false)
     } catch (e) {
-      setOutput('Error: ' + e)
+      setOutput(e)
+      setError(true)
     }
   }
+
+  useEffect(() => {
+    update(src)
+  }, [src])
 
   function select(idx: number) {
     const n = (idx + examples.length) % examples.length
