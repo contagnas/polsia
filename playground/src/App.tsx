@@ -4,7 +4,6 @@ import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
 import type { Extension } from '@codemirror/state'
 import * as wasm from 'polsia'
-import { applyTheme } from './theme'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import EditorPane from './components/EditorPane'
@@ -33,15 +32,6 @@ function App() {
   const [selected, setSelected] = useState(DEFAULT_INDEX)
   const [src, setSrc] = useState(DEFAULT_SRC)
 
-  useEffect(() => {
-    setOutput(wasm.polsia_to_json(src))
-    applyTheme(theme === 'dark')
-  }, [])
-
-  useEffect(() => {
-    applyTheme(theme === 'dark')
-  }, [theme])
-
   function update(code: string) {
     try {
       setOutput(wasm.polsia_to_json(code))
@@ -67,7 +57,6 @@ function App() {
 
   let styles = getComputedStyle(document.documentElement)
   let shadow = styles.getPropertyValue('--color-accent')
-  console.log('background', { color: shadow })
 
   return (
     <div
