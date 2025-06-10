@@ -91,9 +91,9 @@ function App() {
             update(v)
           }}
         />
-        <OutputPane theme={theme} output={output} />
+        <OutputPane theme={theme} output={output} error={error} />
       </div>
-      <Footer />
+      <Footer error={error} />
     </div>
   )
 }

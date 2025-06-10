@@ -1,9 +1,18 @@
 import Marquee from 'react-fast-marquee'
 
-const Footer = () => (
-  <footer className="text-xs text-keyword border-t border-variable bg-panel">
-    <Marquee autoFill>POLSIA &nbsp;</Marquee>
-  </footer>
-)
+interface Props {
+  error: boolean
+}
+
+const Footer = ({ error }: Props) => {
+  const color = error ? 'text-keyword' : 'text-accent'
+  return (
+    <footer className={`text-xs border-t border-variable bg-panel ${color}`}>
+      <Marquee autoFill direction={error ? 'right' : 'left'}>
+        {error ? 'AISLOP ' : 'POLSIA '} &nbsp;
+      </Marquee>
+    </footer>
+  )
+}
 
 export default Footer

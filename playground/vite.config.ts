@@ -12,7 +12,7 @@ const watchPlsFiles = {
       // tell Vite “please do a full reload”
       server.ws.send({ type: 'full-reload', path: '*' })
     }
-  }
+  },
 }
 
 // https://vite.dev/config/

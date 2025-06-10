@@ -68,3 +68,14 @@ export const codeMirrorTheme: Extension = [
   highlightActiveLine(),
   syntaxHighlighting(cmHighlightStyle),
 ]
+
+export const errorOutputTheme: Extension = [
+  cmTheme,
+  highlightSpecialChars(),
+  drawSelection(),
+  dropCursor(),
+  highlightActiveLine(),
+  EditorView.theme({
+    '.cm-content': { color: 'var(--keyword)' },
+  }),
+]
