@@ -256,6 +256,16 @@ mod tests {
     }
 
     #[test]
+    fn parses_multiple_top_objects() {
+        let src = "hello: \"world\"\n{hello: \"world\"}";
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![("hello".into(), Value::String("world".into()))])
+        );
+    }
+
+    #[test]
     fn single_key_chain_without_braces() {
         let src = "foo: bar: baz: 1";
         let expected = parser()
