@@ -32,6 +32,10 @@ function App() {
   const [selected, setSelected] = useState(DEFAULT_INDEX)
   const [src, setSrc] = useState(DEFAULT_SRC)
 
+  useEffect(() => {
+    setOutput(wasm.polsia_to_json(src))
+  }, [src])
+
   function update(code: string) {
     try {
       setOutput(wasm.polsia_to_json(code))
