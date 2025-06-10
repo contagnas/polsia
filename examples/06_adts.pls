@@ -1,5 +1,5 @@
 # Algebraic Data Types (ADTs)
-# ADTs  are composed of product types (aka records, tuples, objects)
+# ADTs are composed of product types (aka records, tuples, objects)
 # and sum types (aka unions, enums). 
 
 # In Polsia product types are just objects:

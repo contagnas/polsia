@@ -18,6 +18,7 @@ goodbye: "moon"
 # defined multiple times, as long as their values agree.
 
 # Unification on objects merges their keys together. This happens
-# recursively, so can create (or patch) deeply nested objects like so:
+# recursively, so we can create (or patch) deeply nested objects like
+# so:
 foo: bar: baz: string: "hello"
 foo: bar: baz: int: 3

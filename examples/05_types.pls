@@ -16,7 +16,7 @@ Types: [
 # though, since JSON only deals with values. That is why we set
 # noexport here.
 
-# Types will succesfully unify with values that belong to the type:
+# Types will successfully unify with values that belong to the type:
 pi: Float
 pi: 3.141519
 
