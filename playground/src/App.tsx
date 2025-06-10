@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { polsia } from './polsia'
 import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
@@ -31,7 +31,8 @@ function App() {
   const [output, setOutput] = useState('Loading...')
   const [error, setError] = useState(false)
   const [selected, setSelected] = useState(DEFAULT_INDEX)
-  const [src, setSrc] = useState(DEFAULT_SRC)
+  const srcRef = useRef(DEFAULT_SRC)
+  const [src, setSrc] = useState(srcRef.current)
 
   function update(code: string) {
     try {
@@ -87,7 +88,8 @@ function App() {
           }}
           extensions={extensions}
           onChange={(v) => {
-            setSrc(v)
+            // https://github.com/uiwjs/react-codemirror/issues/700
+            srcRef.current = v
             update(v)
           }}
         />
