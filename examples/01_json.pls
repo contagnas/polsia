@@ -1,17 +1,31 @@
-### Syntax sugar features ###
-# Comments start with #
-# this is a comment
+# Polsia is a superset of JSON (any JSON is a valid Polsia)  
 
-# braces may be skipped in a top-level object
-# {
-
-"hello": "world",
-
-# quotes are optional for object keys
-goodbye: "moon",
-
-# commas are optional in objects
-commas: "optional"
-
-# braces are optional for objects with a single key
-foo: bar: baz: "nested"
+# https://en.wikipedia.org/wiki/JSON#Syntax
+{
+  "first_name": "John",
+  "last_name": "Smith",
+  "is_alive": true,
+  "age": 27,
+  "address": {
+    "street_address": "21 2nd Street",
+    "city": "New York",
+    "state": "NY",
+    "postal_code": "10021-3100"
+  },
+  "phone_numbers": [
+    {
+      "type": "home",
+      "number": "212 555-1234"
+    },
+    {
+      "type": "office",
+      "number": "646 555-4567"
+    }
+  ],
+  "children": [
+    "Catherine",
+    "Thomas",
+    "Trevor"
+  ],
+  "spouse": null
+}
