@@ -83,10 +83,24 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
     enum Item {
         Member((String, SpannedValue, Span)),
         Directive(Directive),
+        Object(Vec<(String, SpannedValue, Span)>),
     }
 
     let comma = just(',').then_ignore(ws).ignored();
-    let item = choice((directive.map(Item::Directive), member.map(Item::Member)));
+    let inline_object = spanned_value_no_pad()
+        .filter(|v: &SpannedValue| matches!(v.kind, ValueKind::Object(_)))
+        .map(|v| {
+            if let ValueKind::Object(m) = v.kind {
+                Item::Object(m)
+            } else {
+                unreachable!()
+            }
+        });
+    let item = choice((
+        directive.map(Item::Directive),
+        member.map(Item::Member),
+        inline_object,
+    ));
     let top_object = item
         .separated_by(choice((comma, ws1)))
         .allow_trailing()
@@ -99,6 +113,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
                 match i {
                     Item::Member(m) => members.push(m),
                     Item::Directive(d) => directives.push(d),
+                    Item::Object(mut objs) => members.append(&mut objs),
                 }
             }
             Document {

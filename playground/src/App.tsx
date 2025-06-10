@@ -38,7 +38,7 @@ function App() {
       setOutput(wasm.polsia_to_json(code))
       setError(false)
     } catch (e) {
-      setOutput(e)
+      setOutput(String(e))
       setError(true)
     }
   }
