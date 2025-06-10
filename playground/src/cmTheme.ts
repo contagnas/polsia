@@ -9,7 +9,6 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
 import { Extension } from '@codemirror/state'
 
-// 1) The editor chrome (background, gutters, cursor, selection…)
 export const cmTheme = EditorView.theme(
   {
     '&': {
@@ -22,10 +21,6 @@ export const cmTheme = EditorView.theme(
     '.cm-cursor, .cm-dropCursor': {
       borderLeftColor: 'var(--foreground)',
     },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-      {
-        backgroundColor: 'var(--accent)',
-      },
     '.cm-panels': {
       backgroundColor: 'var(--background)',
       color: 'var(--foreground)',
@@ -36,16 +31,31 @@ export const cmTheme = EditorView.theme(
       border: 'none',
     },
     '.cm-activeLine': {
-      backgroundColor: 'var(--panel)',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'var(--panel)',
     },
+    ".cm-selectionBackground": {
+      background: `color-mix(
+          in srgb,
+          var(--keyword) 15%,
+          transparent
+      );`
+    },
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+      background:`color-mix(
+        in srgb,
+        var(--variable) 15%,
+        transparent
+      );`
+
+    },
+
   },
   { dark: false }
 )
 
-// 2) The syntax highlighting rules
 export const cmHighlightStyle = HighlightStyle.define([
   { tag: t.keyword, color: 'var(--keyword)', fontWeight: 'bold' },
   { tag: [t.string, t.special(t.string)], color: 'var(--string)' },
@@ -56,25 +66,14 @@ export const cmHighlightStyle = HighlightStyle.define([
   { tag: t.typeName, color: 'var(--accent)' },
   { tag: t.operator, color: 'var(--accent)' },
   { tag: t.function(t.variableName), color: 'var(--accent)' },
-  // you can add more tags here…
 ])
 
-// 3) Export the array of extensions to load
 export const codeMirrorTheme: Extension = [
   cmTheme,
-  highlightSpecialChars(),
-  drawSelection(),
-  dropCursor(),
-  highlightActiveLine(),
   syntaxHighlighting(cmHighlightStyle),
 ]
 
 export const errorOutputTheme: Extension = [
-  cmTheme,
-  highlightSpecialChars(),
-  drawSelection(),
-  dropCursor(),
-  highlightActiveLine(),
   EditorView.theme({
     '.cm-content': { color: 'var(--keyword)' },
   }),
