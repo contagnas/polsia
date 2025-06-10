@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest'
-const modules = import.meta.glob('../../examples/*.pls', { eager: true, as: 'raw' }) as Record<string, string>
+const modules = import.meta.glob('../../examples/*.pls', {
+  eager: true,
+  as: 'raw',
+}) as Record<string, string>
 
 test('example source files load', () => {
   const files = Object.values(modules)
