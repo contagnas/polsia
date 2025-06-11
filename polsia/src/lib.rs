@@ -605,6 +605,25 @@ stringOrInt: false
     }
 
     #[test]
+    fn sum_type_string_or_int_float_type_fails() {
+        let src = r#"
+StringOrInt: String | Int
+StringOrInt: Float
+StringOrInt: 3.4
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn sum_type_string_or_int_float_type_no_value_fails() {
+        let src = r#"
+StringOrInt: String | Int
+StringOrInt: Float
+"#;
+        must_err(src);
+    }
+
+    #[test]
     fn sum_type_nested_bool() {
         let src = r#"
 stringOrInt: String | Int

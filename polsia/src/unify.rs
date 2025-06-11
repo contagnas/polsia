@@ -26,6 +26,7 @@ fn branch_matches(
         (Some(ValueKind::Object(bm)), Some(ValueKind::Object(vm))) => vm
             .iter()
             .all(|(vk, _, _)| bm.iter().any(|(k, _, _)| k == vk)),
+        (Some(ValueKind::Type(bt)), Some(ValueKind::Type(vt))) => bt == vt,
         _ => true,
     }
 }
@@ -600,6 +601,9 @@ pub fn unify_with_path(a: &Value, b: &Value, path: &str) -> Result<Value, String
         (Value::Union(opts), _other) => {
             let mut results = Vec::new();
             for o in opts {
+                if matches!((o, b), (Value::Type(bt), Value::Type(vt)) if bt != vt) {
+                    continue;
+                }
                 if let Ok(res) = unify_with_path(o, b, path) {
                     results.push(res);
                 }
@@ -615,6 +619,9 @@ pub fn unify_with_path(a: &Value, b: &Value, path: &str) -> Result<Value, String
         (_other, Value::Union(opts)) => {
             let mut results = Vec::new();
             for o in opts {
+                if matches!((a, o), (Value::Type(vt), Value::Type(bt)) if bt != vt) {
+                    continue;
+                }
                 if let Ok(res) = unify_with_path(a, o, path) {
                     results.push(res);
                 }
