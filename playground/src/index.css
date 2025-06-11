@@ -40,3 +40,9 @@
     --comment: #8b949e;
   }
 }
+
+@layer utilities {
+  .scrollbar {
+    scrollbar-color: var(--variable) var(--panel)
+  }
+}

@@ -68,7 +68,7 @@ function App() {
 
   return (
     <div
-      className={`flex flex-col h-full font-mono box-border overflow-hidden bg-background text-foreground ${theme === 'dark' ? 'dark' : 'light'}`}
+      className={`flex flex-col h-full font-mono box-border overflow-hidden bg-background text-foreground scrollbar ${theme === 'dark' ? 'dark' : 'light'}`}
     >
       <Header
         theme={theme}
