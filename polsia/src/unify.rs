@@ -496,10 +496,11 @@ fn unify_tree_inner(
         }
         ValueKind::Object(members) => {
             use std::collections::HashMap;
-            // Preserve order of first appearance while merging duplicates
+            // Preserve the order keys first appear for stable output. Unification
+            // itself must not depend on field order.
             let mut indices: HashMap<String, usize> = HashMap::new();
             let mut out: Vec<(String, SpannedValue, Span)> = Vec::new();
-            let mut dups: HashMap<String, Vec<SpannedValue>> = HashMap::new();
+            let mut all_values: HashMap<String, Vec<SpannedValue>> = HashMap::new();
 
             for (k, v, span) in members {
                 let new_path = if path.is_empty() {
@@ -508,31 +509,45 @@ fn unify_tree_inner(
                     format!("{}.{}", path, k)
                 };
                 let unified_v = unify_tree_inner(v, &new_path, root, false)?;
-                if indices.contains_key(k) {
-                    dups.entry(k.clone()).or_default().push(unified_v);
+                all_values
+                    .entry(k.clone())
+                    .or_default()
+                    .push(unified_v.clone());
+                if let Some(&i) = indices.get(k) {
+                    // already recorded first occurrence
+                    let _ = i; // suppress unused warning in some compilers
                 } else {
                     indices.insert(k.clone(), out.len());
                     out.push((k.clone(), unified_v.clone(), *span));
                     if is_root {
-                        root.insert(k.clone(), unified_v);
+                        root.insert(k.clone(), unified_v.clone());
                     }
                 }
             }
 
-            for (k, values) in dups {
-                let i = indices[&k];
-                let entry_path = if path.is_empty() {
-                    k.clone()
-                } else {
-                    format!("{}.{}", path, k)
-                };
-                let mut current = out[i].1.clone();
-                for v in values {
-                    current = unify_spanned(&current, &v, &entry_path, root)?;
-                }
-                out[i].1 = current.clone();
-                if is_root {
-                    root.insert(k, current);
+            // Repeatedly unify duplicates until results stabilize so that
+            // reference resolution does not depend on ordering.
+            let mut changed = true;
+            while changed {
+                changed = false;
+                for (k, values) in &all_values {
+                    let i = indices[k];
+                    let entry_path = if path.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{}.{}", path, k)
+                    };
+                    let mut current = values[0].clone();
+                    for v in &values[1..] {
+                        current = unify_spanned(&current, v, &entry_path, root)?;
+                    }
+                    if current.to_value() != out[i].1.to_value() {
+                        out[i].1 = current.clone();
+                        changed = true;
+                    }
+                    if is_root {
+                        root.insert(k.clone(), current);
+                    }
                 }
             }
 
