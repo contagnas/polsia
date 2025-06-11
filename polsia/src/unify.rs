@@ -474,6 +474,11 @@ fn unify_tree_inner(
 
 pub fn unify_tree(value: &SpannedValue) -> Result<SpannedValue, UnifyError> {
     let mut root: BTreeMap<String, SpannedValue> = BTreeMap::new();
+    if let ValueKind::Object(members) = &value.kind {
+        for (k, v, _) in members {
+            root.insert(k.clone(), v.clone());
+        }
+    }
     let unified = unify_tree_inner(value, "", &mut root, true)?;
     resolve_refs(&unified, "", &root)
 }
