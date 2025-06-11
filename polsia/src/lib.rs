@@ -7,7 +7,7 @@ pub use types::{
     Directive, Document, SpannedValue, ValType, Value, ValueKind, apply_directives,
     apply_directives_spanned,
 };
-pub use unify::{UnifyError, unify, unify_spanned, unify_tree, unify_with_path};
+pub use unify::{UnifyError, unify_spanned, unify_tree};
 
 #[cfg(feature = "wasm")]
 pub mod wasm;
@@ -31,6 +31,31 @@ mod tests {
 
     fn must_err(src: &str) {
         assert!(parse_unify(src).is_err());
+    }
+
+    fn span_value(value: Value) -> SpannedValue {
+        use Value::*;
+        let span = SimpleSpan::new((), 0..0);
+        SpannedValue {
+            span,
+            kind: match value {
+                Null => ValueKind::Null,
+                Bool(b) => ValueKind::Bool(b),
+                Int(n) => ValueKind::Int(n),
+                Float(n) => ValueKind::Float(n),
+                String(s) => ValueKind::String(s),
+                Array(items) => ValueKind::Array(items.into_iter().map(span_value).collect()),
+                Object(members) => ValueKind::Object(
+                    members
+                        .into_iter()
+                        .map(|(k, v)| (k, span_value(v), span))
+                        .collect(),
+                ),
+                Reference(r) => ValueKind::Reference(r),
+                Type(t) => ValueKind::Type(t),
+                Union(items) => ValueKind::Union(items.into_iter().map(span_value).collect()),
+            },
+        }
     }
 
     #[test]
@@ -162,6 +187,8 @@ mod tests {
 
     #[test]
     fn unify_object_union_of_keys() {
+        use std::collections::BTreeMap;
+
         let a = Value::Object(vec![(
             "foo".into(),
             Value::Object(vec![("bar".into(), Value::Int(1))]),
@@ -170,7 +197,11 @@ mod tests {
             "foo".into(),
             Value::Object(vec![("baz".into(), Value::Int(2))]),
         )]);
-        let unified = unify(&a, &b).unwrap();
+
+        let a_sp = span_value(a);
+        let b_sp = span_value(b);
+        let root = BTreeMap::new();
+        let unified = unify_spanned(&a_sp, &b_sp, "", &root).unwrap();
         let expected = Value::Object(vec![(
             "foo".into(),
             Value::Object(vec![
@@ -178,7 +209,7 @@ mod tests {
                 ("baz".into(), Value::Int(2)),
             ]),
         )]);
-        assert_eq!(unified, expected);
+        assert_eq!(unified.to_value(), expected);
     }
 
     #[test]
