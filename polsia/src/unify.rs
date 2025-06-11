@@ -143,22 +143,6 @@ fn unify_array_spanned(
     })
 }
 
-fn unify_array_plain(a_items: &[Value], b_items: &[Value], path: &str) -> Result<Value, String> {
-    if a_items.len() != b_items.len() {
-        return Err(add_path(path, "array lengths differ".into()));
-    }
-    let mut out = Vec::new();
-    for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
-        let new_path = if path.is_empty() {
-            format!("[{}]", i)
-        } else {
-            format!("{}[{}]", path, i)
-        };
-        out.push(unify_with_path(av, bv, &new_path)?);
-    }
-    Ok(Value::Array(out))
-}
-
 fn unify_object_spanned(
     a_members: &[(String, SpannedValue, Span)],
     b_members: &[(String, SpannedValue, Span)],
@@ -196,32 +180,6 @@ fn unify_object_spanned(
         span,
         kind: ValueKind::Object(members),
     })
-}
-
-fn unify_object_plain(
-    a_members: &[(String, Value)],
-    b_members: &[(String, Value)],
-    path: &str,
-) -> Result<Value, String> {
-    use std::collections::BTreeMap;
-    let mut map: BTreeMap<String, Value> = BTreeMap::new();
-    for (k, v) in a_members {
-        map.insert(k.clone(), v.clone());
-    }
-    for (k, v) in b_members {
-        let new = if let Some(prev) = map.get(k) {
-            let new_path = if path.is_empty() {
-                k.clone()
-            } else {
-                format!("{}.{}", path, k)
-            };
-            unify_with_path(prev, v, &new_path)?
-        } else {
-            v.clone()
-        };
-        map.insert(k.clone(), new);
-    }
-    Ok(Value::Object(map.into_iter().collect()))
 }
 
 fn unify_union_pairs_spanned(
@@ -291,52 +249,6 @@ fn unify_union_against_spanned(
             kind: ValueKind::Union(results),
         })
     }
-}
-
-fn unify_union_pairs_plain(
-    a_opts: &[Value],
-    b_opts: &[Value],
-    path: &str,
-) -> Result<Value, String> {
-    let mut results = Vec::new();
-    for ao in a_opts {
-        for bo in b_opts {
-            if let Ok(res) = unify_with_path(ao, bo, path) {
-                results.push(res);
-            }
-        }
-    }
-    if results.is_empty() {
-        Err(add_path(path, "values do not unify".into()))
-    } else if results.len() == 1 {
-        Ok(results.pop().unwrap())
-    } else {
-        Ok(Value::Union(results))
-    }
-}
-
-fn unify_union_against_plain(opts: &[Value], other: &Value, path: &str) -> Result<Value, String> {
-    let mut results = Vec::new();
-    for o in opts {
-        if matches!((o, other), (Value::Type(bt), Value::Type(vt)) if bt != vt) {
-            continue;
-        }
-        let res = unify_with_path(o, other, path);
-        if let Ok(res) = res {
-            results.push(res);
-        }
-    }
-    if results.is_empty() {
-        Err(add_path(path, "values do not unify".into()))
-    } else if results.len() == 1 {
-        Ok(results.pop().unwrap())
-    } else {
-        Ok(Value::Union(results))
-    }
-}
-
-pub fn unify(a: &Value, b: &Value) -> Result<Value, String> {
-    unify_with_path(a, b, "")
 }
 
 fn add_path(path: &str, msg: String) -> String {
@@ -703,30 +615,5 @@ fn kind_to_value(k: &ValueKind) -> Value {
         ValueKind::Reference(r) => Value::Reference(r.clone()),
         ValueKind::Type(t) => Value::Type(t.clone()),
         ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
-    }
-}
-
-pub fn unify_with_path(a: &Value, b: &Value, path: &str) -> Result<Value, String> {
-    if a == b {
-        return Ok(a.clone());
-    }
-    match (a, b) {
-        (Value::Type(ta), Value::Type(tb)) => unify_types(ta, tb)
-            .map(Value::Type)
-            .map_err(|e| add_path(path, e)),
-        (Value::Type(t), val) | (val, Value::Type(t)) => {
-            unify_type_value(t, val).map_err(|e| add_path(path, e))
-        }
-        (Value::Array(a_items), Value::Array(b_items)) => unify_array_plain(a_items, b_items, path),
-        (Value::Object(a_members), Value::Object(b_members)) => {
-            unify_object_plain(a_members, b_members, path)
-        }
-        (Value::Union(a_opts), Value::Union(b_opts)) => {
-            unify_union_pairs_plain(a_opts, b_opts, path)
-        }
-        (Value::Union(opts), other) | (other, Value::Union(opts)) => {
-            unify_union_against_plain(opts, other, path)
-        }
-        _ => Err(add_path(path, "values do not unify".into())),
     }
 }
