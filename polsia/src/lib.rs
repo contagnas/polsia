@@ -363,6 +363,20 @@ mod tests {
     }
 
     #[test]
+    fn reference_unify_type_mismatch_reordered() {
+        let src = r#"
+            noexport person
+            forest: person
+            forest: name: "forest"
+            forest: age: "old"
+
+            person: name: String
+            person: age: Int
+        "#;
+        must_err(src);
+    }
+
+    #[test]
     fn unresolved_reference_fails() {
         let src = "hello: world";
         must_err(src);
