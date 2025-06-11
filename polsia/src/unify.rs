@@ -111,6 +111,230 @@ fn unify_type_value(t: &ValType, val: &Value) -> Result<Value, String> {
     }
 }
 
+// Helper utilities used by both spanned and plain unification implementations
+
+fn unify_array_spanned(
+    a_items: &[SpannedValue],
+    b_items: &[SpannedValue],
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    if a_items.len() != b_items.len() {
+        return Err(UnifyError {
+            msg: add_path(path, "array lengths differ".into()),
+            span,
+            prev_span: span,
+        });
+    }
+    let mut out = Vec::new();
+    for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
+        let new_path = if path.is_empty() {
+            format!("[{}]", i)
+        } else {
+            format!("{}[{}]", path, i)
+        };
+        out.push(unify_spanned_inner(av, bv, &new_path, root, seen)?);
+    }
+    Ok(SpannedValue {
+        span,
+        kind: ValueKind::Array(out),
+    })
+}
+
+fn unify_array_plain(a_items: &[Value], b_items: &[Value], path: &str) -> Result<Value, String> {
+    if a_items.len() != b_items.len() {
+        return Err(add_path(path, "array lengths differ".into()));
+    }
+    let mut out = Vec::new();
+    for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
+        let new_path = if path.is_empty() {
+            format!("[{}]", i)
+        } else {
+            format!("{}[{}]", path, i)
+        };
+        out.push(unify_with_path(av, bv, &new_path)?);
+    }
+    Ok(Value::Array(out))
+}
+
+fn unify_object_spanned(
+    a_members: &[(String, SpannedValue, Span)],
+    b_members: &[(String, SpannedValue, Span)],
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    use std::collections::BTreeMap;
+    let mut map: BTreeMap<String, SpannedValue> = BTreeMap::new();
+    for (k, v, _) in a_members {
+        map.insert(k.clone(), v.clone());
+    }
+    for (k, v, _) in b_members {
+        let new = if let Some(prev) = map.get(k) {
+            let new_path = if path.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", path, k)
+            };
+            unify_spanned_inner(prev, v, &new_path, root, seen)?
+        } else {
+            v.clone()
+        };
+        map.insert(k.clone(), new);
+    }
+    let members = map
+        .into_iter()
+        .map(|(k, v)| {
+            let span = v.span;
+            (k, v, span)
+        })
+        .collect();
+    Ok(SpannedValue {
+        span,
+        kind: ValueKind::Object(members),
+    })
+}
+
+fn unify_object_plain(
+    a_members: &[(String, Value)],
+    b_members: &[(String, Value)],
+    path: &str,
+) -> Result<Value, String> {
+    use std::collections::BTreeMap;
+    let mut map: BTreeMap<String, Value> = BTreeMap::new();
+    for (k, v) in a_members {
+        map.insert(k.clone(), v.clone());
+    }
+    for (k, v) in b_members {
+        let new = if let Some(prev) = map.get(k) {
+            let new_path = if path.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", path, k)
+            };
+            unify_with_path(prev, v, &new_path)?
+        } else {
+            v.clone()
+        };
+        map.insert(k.clone(), new);
+    }
+    Ok(Value::Object(map.into_iter().collect()))
+}
+
+fn unify_union_pairs_spanned(
+    a_opts: &[SpannedValue],
+    b_opts: &[SpannedValue],
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+    prev_span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    let mut results = Vec::new();
+    for ao in a_opts {
+        for bo in b_opts {
+            if branch_matches(ao, bo, root) && branch_matches(bo, ao, root) {
+                if let Ok(res) = unify_spanned_inner(ao, bo, path, root, seen) {
+                    results.push(res);
+                }
+            }
+        }
+    }
+    if results.is_empty() {
+        Err(UnifyError {
+            msg: add_path(path, "values do not unify".into()),
+            span,
+            prev_span,
+        })
+    } else if results.len() == 1 {
+        Ok(results.pop().unwrap())
+    } else {
+        Ok(SpannedValue {
+            span,
+            kind: ValueKind::Union(results),
+        })
+    }
+}
+
+fn unify_union_against_spanned(
+    opts: &[SpannedValue],
+    other: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+    prev_span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    let mut results = Vec::new();
+    for o in opts {
+        if branch_matches(o, other, root) {
+            let res = unify_spanned_inner(o, other, path, root, seen);
+            if let Ok(res) = res {
+                results.push(res);
+            }
+        }
+    }
+    if results.is_empty() {
+        Err(UnifyError {
+            msg: add_path(path, "values do not unify".into()),
+            span,
+            prev_span,
+        })
+    } else if results.len() == 1 {
+        Ok(results.pop().unwrap())
+    } else {
+        Ok(SpannedValue {
+            span,
+            kind: ValueKind::Union(results),
+        })
+    }
+}
+
+fn unify_union_pairs_plain(
+    a_opts: &[Value],
+    b_opts: &[Value],
+    path: &str,
+) -> Result<Value, String> {
+    let mut results = Vec::new();
+    for ao in a_opts {
+        for bo in b_opts {
+            if let Ok(res) = unify_with_path(ao, bo, path) {
+                results.push(res);
+            }
+        }
+    }
+    if results.is_empty() {
+        Err(add_path(path, "values do not unify".into()))
+    } else if results.len() == 1 {
+        Ok(results.pop().unwrap())
+    } else {
+        Ok(Value::Union(results))
+    }
+}
+
+fn unify_union_against_plain(opts: &[Value], other: &Value, path: &str) -> Result<Value, String> {
+    let mut results = Vec::new();
+    for o in opts {
+        if matches!((o, other), (Value::Type(bt), Value::Type(vt)) if bt != vt) {
+            continue;
+        }
+        let res = unify_with_path(o, other, path);
+        if let Ok(res) = res {
+            results.push(res);
+        }
+    }
+    if results.is_empty() {
+        Err(add_path(path, "values do not unify".into()))
+    } else if results.len() == 1 {
+        Ok(results.pop().unwrap())
+    } else {
+        Ok(Value::Union(results))
+    }
+}
+
 pub fn unify(a: &Value, b: &Value) -> Result<Value, String> {
     unify_with_path(a, b, "")
 }
@@ -193,78 +417,15 @@ fn unify_spanned_inner(
             res
         }
         (ValueKind::Union(a_opts), ValueKind::Union(b_opts)) => {
-            let mut results = Vec::new();
-            for ao in a_opts {
-                for bo in b_opts {
-                    if branch_matches(ao, bo, root) && branch_matches(bo, ao, root) {
-                        if let Ok(res) = unify_spanned_inner(ao, bo, path, root, seen) {
-                            results.push(res);
-                        }
-                    }
-                }
-            }
-            if results.is_empty() {
-                Err(UnifyError {
-                    msg: add_path(path, "values do not unify".into()),
-                    span: b.span,
-                    prev_span: a.span,
-                })
-            } else if results.len() == 1 {
-                Ok(results.pop().unwrap())
-            } else {
-                Ok(SpannedValue {
-                    span: b.span,
-                    kind: ValueKind::Union(results),
-                })
-            }
+            unify_union_pairs_spanned(a_opts, b_opts, path, root, seen, b.span, a.span)
         }
-        (ValueKind::Union(opts), _other) => {
-            let mut results = Vec::new();
-            for o in opts {
-                if branch_matches(o, b, root) {
-                    if let Ok(res) = unify_spanned_inner(o, b, path, root, seen) {
-                        results.push(res);
-                    }
-                }
-            }
-            if results.is_empty() {
-                Err(UnifyError {
-                    msg: add_path(path, "values do not unify".into()),
-                    span: b.span,
-                    prev_span: a.span,
-                })
-            } else if results.len() == 1 {
-                Ok(results.pop().unwrap())
+        (ValueKind::Union(opts), _) | (_, ValueKind::Union(opts)) => {
+            let other = if matches!(&a.kind, ValueKind::Union(_)) {
+                b
             } else {
-                Ok(SpannedValue {
-                    span: b.span,
-                    kind: ValueKind::Union(results),
-                })
-            }
-        }
-        (_other, ValueKind::Union(opts)) => {
-            let mut results = Vec::new();
-            for o in opts {
-                if branch_matches(o, a, root) {
-                    if let Ok(res) = unify_spanned_inner(a, o, path, root, seen) {
-                        results.push(res);
-                    }
-                }
-            }
-            if results.is_empty() {
-                Err(UnifyError {
-                    msg: add_path(path, "values do not unify".into()),
-                    span: b.span,
-                    prev_span: a.span,
-                })
-            } else if results.len() == 1 {
-                Ok(results.pop().unwrap())
-            } else {
-                Ok(SpannedValue {
-                    span: b.span,
-                    kind: ValueKind::Union(results),
-                })
-            }
+                a
+            };
+            unify_union_against_spanned(opts, other, path, root, seen, b.span, a.span)
         }
         (ValueKind::Type(ta), ValueKind::Type(tb)) => match unify_types(ta, tb) {
             Ok(t) => Ok(SpannedValue {
@@ -277,86 +438,26 @@ fn unify_spanned_inner(
                 prev_span: a.span,
             }),
         },
-        (ValueKind::Type(t), other) => match unify_type_value(t, &kind_to_value(other)) {
-            Ok(j) => Ok(SpannedValue {
-                span: b.span,
-                kind: value_to_kind(j),
-            }),
-            Err(e) => Err(UnifyError {
-                msg: add_path(path, e),
-                span: b.span,
-                prev_span: a.span,
-            }),
-        },
-        (other, ValueKind::Type(t)) => match unify_type_value(t, &kind_to_value(other)) {
-            Ok(j) => Ok(SpannedValue {
-                span: a.span,
-                kind: value_to_kind(j),
-            }),
-            Err(e) => Err(UnifyError {
-                msg: add_path(path, e),
-                span: b.span,
-                prev_span: a.span,
-            }),
-        },
-        (ValueKind::Array(a_items), ValueKind::Array(b_items)) => {
-            if a_items.len() != b_items.len() {
-                return Err(UnifyError {
-                    msg: add_path(path, "array lengths differ".into()),
-                    span: b.span,
+        (ValueKind::Type(t), other) | (other, ValueKind::Type(t)) => {
+            let is_a_type = matches!(&a.kind, ValueKind::Type(_));
+            let span = if is_a_type { b.span } else { a.span };
+            match unify_type_value(t, &kind_to_value(other)) {
+                Ok(j) => Ok(SpannedValue {
+                    span,
+                    kind: value_to_kind(j),
+                }),
+                Err(e) => Err(UnifyError {
+                    msg: add_path(path, e),
+                    span,
                     prev_span: a.span,
-                });
+                }),
             }
-            let mut out = Vec::new();
-            for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
-                let new_path = if path.is_empty() {
-                    format!("[{}]", i)
-                } else {
-                    format!("{}[{}]", path, i)
-                };
-                let unified = unify_spanned(av, bv, &new_path, root)?;
-                out.push(unified);
-            }
-            Ok(SpannedValue {
-                span: b.span,
-                kind: ValueKind::Array(out),
-            })
+        }
+        (ValueKind::Array(a_items), ValueKind::Array(b_items)) => {
+            unify_array_spanned(a_items, b_items, path, root, seen, b.span)
         }
         (ValueKind::Object(a_members), ValueKind::Object(b_members)) => {
-            use std::collections::BTreeMap;
-            let mut map: BTreeMap<String, SpannedValue> = BTreeMap::new();
-            for (k, v, _) in a_members {
-                map.insert(k.clone(), v.clone());
-            }
-            for (k, v, _) in b_members {
-                match map.get(k) {
-                    Some(prev) => {
-                        let new_path = if path.is_empty() {
-                            k.clone()
-                        } else {
-                            format!("{}.{}", path, k)
-                        };
-                        let unified = unify_spanned(prev, v, &new_path, root)?;
-                        map.insert(k.clone(), unified);
-                    }
-                    None => {
-                        map.insert(k.clone(), v.clone());
-                    }
-                }
-            }
-            let members = map.into_iter().collect::<Vec<_>>();
-            Ok(SpannedValue {
-                span: b.span,
-                kind: ValueKind::Object(
-                    members
-                        .into_iter()
-                        .map(|(k, v)| {
-                            let span = v.span;
-                            (k, v, span)
-                        })
-                        .collect(),
-                ),
-            })
+            unify_object_spanned(a_members, b_members, path, root, seen, b.span)
         }
         _ => Err(UnifyError {
             msg: add_path(path, "values do not unify".into()),
@@ -601,98 +702,15 @@ pub fn unify_with_path(a: &Value, b: &Value, path: &str) -> Result<Value, String
         (Value::Type(t), val) | (val, Value::Type(t)) => {
             unify_type_value(t, val).map_err(|e| add_path(path, e))
         }
-        (Value::Array(a_items), Value::Array(b_items)) => {
-            if a_items.len() != b_items.len() {
-                return Err(add_path(path, "array lengths differ".into()));
-            }
-            let mut out = Vec::new();
-            for (i, (av, bv)) in a_items.iter().zip(b_items.iter()).enumerate() {
-                let new_path = if path.is_empty() {
-                    format!("[{}]", i)
-                } else {
-                    format!("{}[{}]", path, i)
-                };
-                let unified = unify_with_path(av, bv, &new_path)?;
-                out.push(unified);
-            }
-            Ok(Value::Array(out))
-        }
+        (Value::Array(a_items), Value::Array(b_items)) => unify_array_plain(a_items, b_items, path),
         (Value::Object(a_members), Value::Object(b_members)) => {
-            use std::collections::BTreeMap;
-            let mut map: BTreeMap<String, Value> = BTreeMap::new();
-            for (k, v) in a_members {
-                map.insert(k.clone(), v.clone());
-            }
-            for (k, v) in b_members {
-                match map.get(k) {
-                    Some(existing) => {
-                        let new_path = if path.is_empty() {
-                            k.clone()
-                        } else {
-                            format!("{}.{}", path, k)
-                        };
-                        let unified = unify_with_path(existing, v, &new_path)?;
-                        map.insert(k.clone(), unified);
-                    }
-                    None => {
-                        map.insert(k.clone(), v.clone());
-                    }
-                }
-            }
-            Ok(Value::Object(map.into_iter().collect()))
+            unify_object_plain(a_members, b_members, path)
         }
         (Value::Union(a_opts), Value::Union(b_opts)) => {
-            let mut results = Vec::new();
-            for ao in a_opts {
-                for bo in b_opts {
-                    if let Ok(res) = unify_with_path(ao, bo, path) {
-                        results.push(res);
-                    }
-                }
-            }
-            if results.is_empty() {
-                Err(add_path(path, "values do not unify".into()))
-            } else if results.len() == 1 {
-                Ok(results.pop().unwrap())
-            } else {
-                Ok(Value::Union(results))
-            }
+            unify_union_pairs_plain(a_opts, b_opts, path)
         }
-        (Value::Union(opts), _other) => {
-            let mut results = Vec::new();
-            for o in opts {
-                if matches!((o, b), (Value::Type(bt), Value::Type(vt)) if bt != vt) {
-                    continue;
-                }
-                if let Ok(res) = unify_with_path(o, b, path) {
-                    results.push(res);
-                }
-            }
-            if results.is_empty() {
-                Err(add_path(path, "values do not unify".into()))
-            } else if results.len() == 1 {
-                Ok(results.pop().unwrap())
-            } else {
-                Ok(Value::Union(results))
-            }
-        }
-        (_other, Value::Union(opts)) => {
-            let mut results = Vec::new();
-            for o in opts {
-                if matches!((a, o), (Value::Type(vt), Value::Type(bt)) if bt != vt) {
-                    continue;
-                }
-                if let Ok(res) = unify_with_path(a, o, path) {
-                    results.push(res);
-                }
-            }
-            if results.is_empty() {
-                Err(add_path(path, "values do not unify".into()))
-            } else if results.len() == 1 {
-                Ok(results.pop().unwrap())
-            } else {
-                Ok(Value::Union(results))
-            }
+        (Value::Union(opts), other) | (other, Value::Union(opts)) => {
+            unify_union_against_plain(opts, other, path)
         }
         _ => Err(add_path(path, "values do not unify".into())),
     }
