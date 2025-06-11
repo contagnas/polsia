@@ -29,3 +29,10 @@ animals: {
   pluto: Dog
   pluto: planet: false
 }
+
+# Unification can do some deduction
+noexport Pet
+Pet: Dog | Cat
+pet: Pet
+pet: says: "meow"
+# pet.species must be cat, Polsia deduces it.
