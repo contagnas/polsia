@@ -7,6 +7,7 @@ use crate::{SpannedValue, ValueKind, types::Span};
 
 fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
     match &value.kind {
+        ValueKind::Reference(p) => Some((value.span, format!("reference {}", p))),
         ValueKind::Type(t) => Some((value.span, format!("{:?}", t))),
         ValueKind::Union(items) => {
             for item in items {

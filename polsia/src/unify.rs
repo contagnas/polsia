@@ -139,44 +139,65 @@ fn lookup<'a>(root: &'a BTreeMap<String, SpannedValue>, path: &str) -> Option<&'
     Some(current)
 }
 
+use std::collections::HashSet;
+
 pub fn unify_spanned(
     a: &SpannedValue,
     b: &SpannedValue,
     path: &str,
     root: &BTreeMap<String, SpannedValue>,
 ) -> Result<SpannedValue, UnifyError> {
+    let mut seen = HashSet::new();
+    unify_spanned_inner(a, b, path, root, &mut seen)
+}
+
+fn unify_spanned_inner(
+    a: &SpannedValue,
+    b: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut HashSet<String>,
+) -> Result<SpannedValue, UnifyError> {
     if a.to_value() == b.to_value() {
         return Ok(b.clone());
     }
     match (&a.kind, &b.kind) {
         (ValueKind::Reference(pa), _) => {
-            if let Some(val) = lookup(root, pa) {
-                unify_spanned(val, b, path, root)
-            } else {
-                Err(UnifyError {
+            if !seen.insert(pa.clone()) {
+                return Ok(b.clone());
+            }
+            let res = match lookup(root, pa) {
+                Some(val) => unify_spanned_inner(val, b, path, root, seen),
+                None => Err(UnifyError {
                     msg: add_path(path, format!("unresolved reference {}", pa)),
                     span: b.span,
                     prev_span: a.span,
-                })
-            }
+                }),
+            };
+            seen.remove(pa);
+            res
         }
         (_, ValueKind::Reference(pb)) => {
-            if let Some(val) = lookup(root, pb) {
-                unify_spanned(a, val, path, root)
-            } else {
-                Err(UnifyError {
+            if !seen.insert(pb.clone()) {
+                return Ok(a.clone());
+            }
+            let res = match lookup(root, pb) {
+                Some(val) => unify_spanned_inner(a, val, path, root, seen),
+                None => Err(UnifyError {
                     msg: add_path(path, format!("unresolved reference {}", pb)),
                     span: b.span,
                     prev_span: a.span,
-                })
-            }
+                }),
+            };
+            seen.remove(pb);
+            res
         }
         (ValueKind::Union(a_opts), ValueKind::Union(b_opts)) => {
             let mut results = Vec::new();
             for ao in a_opts {
                 for bo in b_opts {
                     if branch_matches(ao, bo, root) && branch_matches(bo, ao, root) {
-                        if let Ok(res) = unify_spanned(ao, bo, path, root) {
+                        if let Ok(res) = unify_spanned_inner(ao, bo, path, root, seen) {
                             results.push(res);
                         }
                     }
@@ -201,7 +222,7 @@ pub fn unify_spanned(
             let mut results = Vec::new();
             for o in opts {
                 if branch_matches(o, b, root) {
-                    if let Ok(res) = unify_spanned(o, b, path, root) {
+                    if let Ok(res) = unify_spanned_inner(o, b, path, root, seen) {
                         results.push(res);
                     }
                 }
@@ -225,7 +246,7 @@ pub fn unify_spanned(
             let mut results = Vec::new();
             for o in opts {
                 if branch_matches(o, a, root) {
-                    if let Ok(res) = unify_spanned(a, o, path, root) {
+                    if let Ok(res) = unify_spanned_inner(a, o, path, root, seen) {
                         results.push(res);
                     }
                 }
@@ -374,9 +395,11 @@ fn unify_tree_inner(
         }
         ValueKind::Object(members) => {
             use std::collections::HashMap;
-            // Preserve the order of first appearance while merging duplicates
+            // Preserve order of first appearance while merging duplicates
             let mut indices: HashMap<String, usize> = HashMap::new();
             let mut out: Vec<(String, SpannedValue, Span)> = Vec::new();
+            let mut dups: HashMap<String, Vec<SpannedValue>> = HashMap::new();
+
             for (k, v, span) in members {
                 let new_path = if path.is_empty() {
                     k.clone()
@@ -384,13 +407,8 @@ fn unify_tree_inner(
                     format!("{}.{}", path, k)
                 };
                 let unified_v = unify_tree_inner(v, &new_path, root, false)?;
-                if let Some(i) = indices.get(k).copied() {
-                    let prev = out[i].1.clone();
-                    let merged = unify_spanned(&prev, &unified_v, &new_path, root)?;
-                    out[i].1 = merged.clone();
-                    if is_root {
-                        root.insert(k.clone(), merged);
-                    }
+                if indices.contains_key(k) {
+                    dups.entry(k.clone()).or_default().push(unified_v);
                 } else {
                     indices.insert(k.clone(), out.len());
                     out.push((k.clone(), unified_v.clone(), *span));
@@ -399,6 +417,24 @@ fn unify_tree_inner(
                     }
                 }
             }
+
+            for (k, values) in dups {
+                let i = indices[&k];
+                let entry_path = if path.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{}.{}", path, k)
+                };
+                let mut current = out[i].1.clone();
+                for v in values {
+                    current = unify_spanned(&current, &v, &entry_path, root)?;
+                }
+                out[i].1 = current.clone();
+                if is_root {
+                    root.insert(k, current);
+                }
+            }
+
             Ok(SpannedValue {
                 span: value.span,
                 kind: ValueKind::Object(out),
@@ -419,9 +455,33 @@ fn resolve_refs(
     path: &str,
     root: &BTreeMap<String, SpannedValue>,
 ) -> Result<SpannedValue, UnifyError> {
+    let mut seen = HashSet::new();
+    resolve_refs_inner(value, path, root, &mut seen)
+}
+
+fn resolve_refs_inner(
+    value: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut HashSet<String>,
+) -> Result<SpannedValue, UnifyError> {
     match &value.kind {
         ValueKind::Reference(p) => match lookup(root, p) {
-            Some(v) => resolve_refs(v, path, root),
+            Some(v) => {
+                if !seen.insert(p.clone()) {
+                    if !matches!(v.kind, ValueKind::Reference(_)) {
+                        return Err(UnifyError {
+                            msg: add_path(path, "infinite structural cycle".into()),
+                            span: value.span,
+                            prev_span: value.span,
+                        });
+                    }
+                    return Ok(value.clone());
+                }
+                let res = resolve_refs_inner(v, path, root, seen);
+                seen.remove(p);
+                res
+            }
             None => Err(UnifyError {
                 msg: add_path(path, format!("unresolved reference {}", p)),
                 span: value.span,
@@ -431,7 +491,7 @@ fn resolve_refs(
         ValueKind::Array(items) => {
             let mut out = Vec::new();
             for item in items {
-                out.push(resolve_refs(item, path, root)?);
+                out.push(resolve_refs_inner(item, path, root, seen)?);
             }
             Ok(SpannedValue {
                 span: value.span,
@@ -441,7 +501,7 @@ fn resolve_refs(
         ValueKind::Union(items) => {
             let mut out = Vec::new();
             for item in items {
-                out.push(resolve_refs(item, path, root)?);
+                out.push(resolve_refs_inner(item, path, root, seen)?);
             }
             Ok(SpannedValue {
                 span: value.span,
@@ -456,7 +516,7 @@ fn resolve_refs(
                 } else {
                     format!("{}.{}", path, k)
                 };
-                let resolved = resolve_refs(v, &new_path, root)?;
+                let resolved = resolve_refs_inner(v, &new_path, root, seen)?;
                 out.push((k.clone(), resolved, *span));
             }
             Ok(SpannedValue {

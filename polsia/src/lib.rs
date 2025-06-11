@@ -385,6 +385,83 @@ mod tests {
     }
 
     #[test]
+    fn reference_cycle_not_exportable() {
+        let src = "foo: bar\nbar: foo";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let foo = members
+                    .iter()
+                    .find(|(k, _, _)| k == "foo")
+                    .unwrap()
+                    .1
+                    .clone();
+                let bar = members
+                    .iter()
+                    .find(|(k, _, _)| k == "bar")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert!(matches!(foo.kind, ValueKind::Reference(_)));
+                assert!(matches!(bar.kind, ValueKind::Reference(_)));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn reference_cycle_resolves_with_value() {
+        let src = "foo: bar\nbar: foo\nfoo: 3";
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                ("foo".into(), Value::Int(3)),
+                ("bar".into(), Value::Int(3)),
+            ])
+        );
+    }
+
+    #[test]
+    fn reference_cycle_resolves_regardless_of_order() {
+        let src = "foo: 3\n\nfoo: bar\nbar: baz\nbaz: foo";
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                ("foo".into(), Value::Int(3)),
+                ("bar".into(), Value::Int(3)),
+                ("baz".into(), Value::Int(3)),
+            ])
+        );
+    }
+
+    #[test]
+    fn reference_cycle_conflict_fails() {
+        let src = "foo: bar\nbar: foo\nfoo: 3\nbar: 4";
+        must_err(src);
+    }
+
+    #[test]
+    fn structural_reference_cycle_reports_error() {
+        let src = r#"
+            meadow: {
+                color: "black"
+                bestfriend: forest
+            }
+
+            forest: {
+                color: "grey"
+                bestfriend: meadow
+            }
+        "#;
+        match parse_unify(src) {
+            Ok(_) => panic!("expected error"),
+            Err(err) => assert!(err.msg.contains("infinite structural cycle")),
+        }
+    }
+
+    #[test]
     fn parse_int_and_float_values() {
         let src = "my_int: 1\nmy_float: 3.1415";
         let unified = must_unify(src);
