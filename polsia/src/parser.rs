@@ -1,4 +1,4 @@
-use crate::types::{Annotation, Document, Span, SpannedValue, ValType, ValueKind};
+use crate::types::{Document, Span, SpannedValue, ValType, ValueKind};
 use chumsky::prelude::*;
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 
@@ -52,37 +52,9 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
             (k, v, span)
         });
 
-    let reference = text::ident()
-        .separated_by(just('.'))
-        .at_least(1)
-        .collect::<Vec<_>>()
-        .map(|parts: Vec<&str>| parts.join("."))
-        .filter(|s: &String| {
-            !matches!(
-                s.as_str(),
-                "null"
-                    | "true"
-                    | "false"
-                    | "Any"
-                    | "Nothing"
-                    | "Int"
-                    | "Number"
-                    | "Rational"
-                    | "Float"
-                    | "String"
-                    | "Boolean"
-            )
-        });
-
-    let annotation = reference
-        .then_ignore(just(':').padded_by(ws))
-        .then(just('@').ignore_then(text::keyword("NoExport")))
-        .map(|(path, _)| Annotation::NoExport(path));
-
     #[derive(Debug)]
     enum Item {
         Member((String, SpannedValue, Span)),
-        Annotation(Annotation),
         Object(Vec<(String, SpannedValue, Span)>),
     }
 
@@ -96,11 +68,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
                 unreachable!()
             }
         });
-    let item = choice((
-        annotation.map(Item::Annotation),
-        member.map(Item::Member),
-        inline_object,
-    ));
+    let item = choice((member.map(Item::Member), inline_object));
     let top_object = item
         .separated_by(choice((comma, ws1)))
         .allow_trailing()
@@ -108,11 +76,9 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
         .collect::<Vec<_>>()
         .map_with(|items, e| {
             let mut members = Vec::new();
-            let mut annotations = Vec::new();
             for i in items {
                 match i {
                     Item::Member(m) => members.push(m),
-                    Item::Annotation(a) => annotations.push(a),
                     Item::Object(mut objs) => members.append(&mut objs),
                 }
             }
@@ -121,7 +87,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
                     span: e.span(),
                     kind: ValueKind::Object(members),
                 },
-                annotations,
+                annotations: Vec::new(),
             }
         });
 
@@ -133,7 +99,10 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
         }),
     ))
     .padded_by(ws)
-    .map(|d| d)
+    .map(|mut d| {
+        d.annotations = crate::types::extract_annotations(&mut d.value);
+        d
+    })
 }
 
 pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
@@ -351,6 +320,12 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                 span: e.span(),
                 kind: ValueKind::Type(ValType::Boolean),
             }),
+            just('@')
+                .ignore_then(text::keyword("NoExport"))
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::NoExport,
+                }),
             number,
             string,
             array,

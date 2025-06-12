@@ -46,6 +46,7 @@ pub enum ValueKind {
     Reference(String),
     Type(ValType),
     Union(Vec<SpannedValue>),
+    NoExport,
 }
 
 impl SpannedValue {
@@ -65,6 +66,9 @@ impl SpannedValue {
             ValueKind::Reference(r) => Value::Reference(r.clone()),
             ValueKind::Type(t) => Value::Type(t.clone()),
             ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
+            ValueKind::NoExport => {
+                panic!("NoExport annotation should be removed before conversion")
+            }
         }
     }
 }
@@ -157,4 +161,31 @@ pub fn apply_annotations_spanned(value: &mut SpannedValue, annotations: &[Annota
             }
         }
     }
+}
+
+fn collect_noexport(value: &mut SpannedValue, path: &str, out: &mut Vec<Annotation>) {
+    if let ValueKind::Object(members) = &mut value.kind {
+        let mut i = 0;
+        while i < members.len() {
+            let (k, v, _) = &mut members[i];
+            let new_path = if path.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", path, k)
+            };
+            if matches!(v.kind, ValueKind::NoExport) {
+                out.push(Annotation::NoExport(new_path));
+                members.remove(i);
+            } else {
+                collect_noexport(v, &new_path, out);
+                i += 1;
+            }
+        }
+    }
+}
+
+pub fn extract_annotations(value: &mut SpannedValue) -> Vec<Annotation> {
+    let mut out = Vec::new();
+    collect_noexport(value, "", &mut out);
+    out
 }

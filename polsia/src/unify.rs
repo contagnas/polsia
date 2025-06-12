@@ -302,6 +302,8 @@ fn unify_spanned_inner(
         return Ok(b.clone());
     }
     match (&a.kind, &b.kind) {
+        (ValueKind::NoExport, _) => Ok(b.clone()),
+        (_, ValueKind::NoExport) => Ok(a.clone()),
         (ValueKind::Reference(pa), _) => {
             if !seen.insert(pa.clone()) {
                 return Ok(b.clone());
@@ -624,5 +626,6 @@ fn kind_to_value(k: &ValueKind) -> Value {
         ValueKind::Reference(r) => Value::Reference(r.clone()),
         ValueKind::Type(t) => Value::Type(t.clone()),
         ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
+        ValueKind::NoExport => panic!("NoExport annotation should be removed before conversion"),
     }
 }

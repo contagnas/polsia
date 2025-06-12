@@ -1,8 +1,8 @@
 # The NoExport annotation causes a field to not be included in the
 # exported JSON:
-credentials.password: @NoExport
 credentials: {
   username: "root"
+  password: @NoExport
   password: "hunter2"
 }
 

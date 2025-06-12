@@ -630,6 +630,48 @@ my_float: 3.1415";
     }
 
     #[test]
+    fn nested_noexport_in_object() {
+        let src = r#"
+credentials: {
+  username: "root"
+  password: @NoExport
+  password: Nothing
+}
+"#;
+        let doc = document().parse(src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_annotations_spanned(&mut unified, &doc.annotations);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "credentials".into(),
+                Value::Object(vec![("username".into(), Value::String("root".into()))]),
+            )])
+        );
+    }
+
+    #[test]
+    fn chain_noexport() {
+        let src = r#"
+credentials: password: @NoExport
+credentials: {
+  username: "root"
+  password: Nothing
+}
+"#;
+        let doc = document().parse(src).into_result().unwrap();
+        let mut unified = unify_tree(&doc.value).unwrap();
+        apply_annotations_spanned(&mut unified, &doc.annotations);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "credentials".into(),
+                Value::Object(vec![("username".into(), Value::String("root".into()))]),
+            )])
+        );
+    }
+
+    #[test]
     fn list_unify_type_value() {
         let src = r#"
 anInt: [Int]
