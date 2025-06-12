@@ -18,14 +18,14 @@ pub enum Value {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Directive {
+pub enum Annotation {
     NoExport(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub value: SpannedValue,
-    pub directives: Vec<Directive>,
+    pub annotations: Vec<Annotation>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -121,10 +121,10 @@ fn remove_path(value: &mut Value, parts: &[&str]) {
     }
 }
 
-pub fn apply_directives(mut value: Value, directives: &[Directive]) -> Value {
-    for d in directives {
-        match d {
-            Directive::NoExport(path) => {
+pub fn apply_annotations(mut value: Value, annotations: &[Annotation]) -> Value {
+    for a in annotations {
+        match a {
+            Annotation::NoExport(path) => {
                 let parts: Vec<&str> = path.split('.').collect();
                 remove_path(&mut value, &parts);
             }
@@ -148,10 +148,10 @@ fn remove_path_spanned(value: &mut SpannedValue, parts: &[&str]) {
     }
 }
 
-pub fn apply_directives_spanned(value: &mut SpannedValue, directives: &[Directive]) {
-    for d in directives {
-        match d {
-            Directive::NoExport(path) => {
+pub fn apply_annotations_spanned(value: &mut SpannedValue, annotations: &[Annotation]) {
+    for a in annotations {
+        match a {
+            Annotation::NoExport(path) => {
                 let parts: Vec<&str> = path.split('.').collect();
                 remove_path_spanned(value, &parts);
             }

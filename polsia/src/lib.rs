@@ -4,8 +4,8 @@ pub mod unify;
 
 pub use parser::{document, parser};
 pub use types::{
-    Directive, Document, SpannedValue, ValType, Value, ValueKind, apply_directives,
-    apply_directives_spanned,
+    Annotation, Document, SpannedValue, ValType, Value, ValueKind, apply_annotations,
+    apply_annotations_spanned,
 };
 pub use unify::{UnifyError, unify_spanned, unify_tree};
 
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn reference_unify_type_mismatch_reordered() {
         let src = r#"
-            noexport person
+            person: @NoExport
             forest: person
             forest: name: "forest"
             forest: age: "old"
@@ -559,7 +559,7 @@ my_float: 3.1415";
             let src = std::fs::read_to_string(&path).unwrap();
             let doc = document().parse(&src).into_result().unwrap();
             let mut unified = unify_tree(&doc.value).unwrap();
-            apply_directives_spanned(&mut unified, &doc.directives);
+            apply_annotations_spanned(&mut unified, &doc.annotations);
             let json = unified.to_value().to_pretty_string();
             assert!(!json.is_empty());
         }
@@ -567,10 +567,10 @@ my_float: 3.1415";
 
     #[test]
     fn noexport_removes_field() {
-        let src = "foo: 1\nbar: 2\nnoexport bar";
+        let src = "foo: 1\nbar: 2\nbar: @NoExport";
         let doc = document().parse(src).into_result().unwrap();
         let unified = unify_tree(&doc.value).unwrap();
-        let val = apply_directives(unified.to_value(), &doc.directives);
+        let val = apply_annotations(unified.to_value(), &doc.annotations);
         assert_eq!(val, Value::Object(vec![("foo".into(), Value::Int(1))]));
     }
 
@@ -578,7 +578,7 @@ my_float: 3.1415";
     fn noexport_with_type_allows_export() {
         let src = r#"
             # unexported types don't break json
-            noexport creature
+            creature: @NoExport
             creature: {
               name: String
               age: Int
@@ -590,7 +590,7 @@ my_float: 3.1415";
         "#;
         let doc = document().parse(src).into_result().unwrap();
         let mut unified = unify_tree(&doc.value).unwrap();
-        apply_directives_spanned(&mut unified, &doc.directives);
+        apply_annotations_spanned(&mut unified, &doc.annotations);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -606,9 +606,9 @@ my_float: 3.1415";
     #[test]
     fn noexport_sum_type_exportable() {
         let src = r#"
-            noexport Foo
-            noexport Bar
-            noexport FooOrBar
+            Foo: @NoExport
+            Bar: @NoExport
+            FooOrBar: @NoExport
 
             Foo: foo: Int
             Bar: bar: String
@@ -619,7 +619,7 @@ my_float: 3.1415";
         "#;
         let doc = document().parse(src).into_result().unwrap();
         let mut unified = unify_tree(&doc.value).unwrap();
-        apply_directives_spanned(&mut unified, &doc.directives);
+        apply_annotations_spanned(&mut unified, &doc.annotations);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -807,19 +807,19 @@ snack: StringCheese
     #[test]
     fn unresolved_sum_type_not_exportable() {
         let src = r#"
-noexport Dog
+Dog: @NoExport
 Dog: {
   species: "dog"
   says: "bark"
 }
 
-noexport Cat
+Cat: @NoExport
 Cat: {
   species: "cat"
   says: "meow"
 }
 
-noexport Pet
+Pet: @NoExport
 Pet: Cat | Dog
 Pet: {
   species: String
@@ -830,7 +830,7 @@ pet: Pet
 "#;
         let doc = document().parse(src).into_result().unwrap();
         let mut unified = unify_tree(&doc.value).unwrap();
-        apply_directives_spanned(&mut unified, &doc.directives);
+        apply_annotations_spanned(&mut unified, &doc.annotations);
         match &unified.kind {
             ValueKind::Object(members) => {
                 let pet = members
@@ -848,19 +848,19 @@ pet: Pet
     #[test]
     fn sum_type_resolves_when_fields_specified() {
         let src = r#"
-noexport Dog
+Dog: @NoExport
 Dog: {
   species: "dog"
   says: "bark"
 }
 
-noexport Cat
+Cat: @NoExport
 Cat: {
   species: "cat"
   says: "meow"
 }
 
-noexport Pet
+Pet: @NoExport
 Pet: Cat | Dog
 Pet: {
   species: String
@@ -873,7 +873,7 @@ pet: says: "meow"
 "#;
         let doc = document().parse(src).into_result().unwrap();
         let mut unified = unify_tree(&doc.value).unwrap();
-        apply_directives_spanned(&mut unified, &doc.directives);
+        apply_annotations_spanned(&mut unified, &doc.annotations);
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(

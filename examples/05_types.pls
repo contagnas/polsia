@@ -1,5 +1,5 @@
 # Polsia includes these built-in types:
-noexport Types
+Types: @NoExport
 Types: [
   Any,
   Nothing,
@@ -14,7 +14,7 @@ Types: [
 # There is no distinction between values and types in Polsia; they can
 # appear anywhere a value can. They cannot be exported to JSON,
 # though, since JSON only deals with values. That is why we set
-# noexport here.
+# @NoExport here.
 
 # Types will successfully unify with values that belong to the type:
 pi: Float
@@ -25,7 +25,7 @@ meaning: Any
 meaning: 42
 
 # no values belong to Nothing, the "bottom" type
-noexport error
+error: @NoExport
 error: Nothing
 
 # null is a unit type, it does not get a separate type

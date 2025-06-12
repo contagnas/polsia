@@ -1,4 +1,4 @@
-use crate::{apply_directives_spanned, document, unify_tree};
+use crate::{apply_annotations_spanned, document, unify_tree};
 use ariadne::{Color, Config, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -44,7 +44,7 @@ pub fn polsia_to_json(src: &str) -> Result<String, String> {
     match parse_result {
         Ok(doc) => match unify_tree(&doc.value) {
             Ok(mut value) => {
-                apply_directives_spanned(&mut value, &doc.directives);
+                apply_annotations_spanned(&mut value, &doc.annotations);
                 if let Some((span, t)) = find_unresolved(&value) {
                     let msg = format!("value of type {} is unspecified", t);
                     let span_range = span.into_range();

@@ -1,6 +1,6 @@
-# The noexport keyword causes a field to not be included in the
+# The NoExport annotation causes a field to not be included in the
 # exported JSON:
-noexport credentials.password
+credentials.password: @NoExport
 credentials: {
   username: "root"
   password: "hunter2"

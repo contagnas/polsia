@@ -1,19 +1,19 @@
 # Polsia doesn't support templating, but its unification operates a
 # bit like inheritance and can be used like templating.
 
-noexport Bear
+Bear: @NoExport
 Bear: {
   species: "bear"
   says: "roar"
 }
 
-noexport Dog
+Dog: @NoExport
 Dog: {
   species: "dog"
   says: "bark"
 }
 
-noexport Cat
+Cat: @NoExport
 Cat: {
   species: "cat"
   says: "meow"
@@ -31,7 +31,7 @@ animals: {
 }
 
 # Unification can do some deduction
-noexport Pet
+Pet: @NoExport
 Pet: Dog | Cat
 pet: Pet
 pet: says: "meow"

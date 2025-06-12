@@ -3,7 +3,7 @@
 # and sum types (aka unions, enums). 
 
 # In Polsia product types are just objects:
-noexport FooAndBar
+FooAndBar: @NoExport
 FooAndBar: {
   foo: Int
   bar: String
@@ -16,7 +16,7 @@ fooAndBar: {
 }
 
 # Union types are denoted by "|":
-noexport FooOrBar
+FooOrBar: @NoExport
 FooOrBar: { foo: Int } | { bar: String }
 
 a_foo: FooOrBar

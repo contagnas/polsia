@@ -37,9 +37,11 @@ const parser: StreamParser<State> = {
       return 'string'
     }
 
+    if (stream.match('@')) return 'string'
+
     if (
       stream.match(
-        /\b(?:noexport|null|true|false|Any|Nothing|Int|Number|Rational|Float|String|Boolean)\b/
+        /\b(?:null|true|false|Any|Nothing|Int|Number|Rational|Float|String|Boolean|NoExport)\b/
       )
     ) {
       return 'keyword'

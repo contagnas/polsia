@@ -1,4 +1,4 @@
-use crate::types::{Directive, Document, Span, SpannedValue, ValType, ValueKind};
+use crate::types::{Annotation, Document, Span, SpannedValue, ValType, ValueKind};
 use chumsky::prelude::*;
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 
@@ -74,15 +74,15 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
             )
         });
 
-    let directive = text::keyword("noexport")
-        .padded_by(ws)
-        .ignore_then(reference)
-        .map(Directive::NoExport);
+    let annotation = reference
+        .then_ignore(just(':').padded_by(ws))
+        .then(just('@').ignore_then(text::keyword("NoExport")))
+        .map(|(path, _)| Annotation::NoExport(path));
 
     #[derive(Debug)]
     enum Item {
         Member((String, SpannedValue, Span)),
-        Directive(Directive),
+        Annotation(Annotation),
         Object(Vec<(String, SpannedValue, Span)>),
     }
 
@@ -97,7 +97,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
             }
         });
     let item = choice((
-        directive.map(Item::Directive),
+        annotation.map(Item::Annotation),
         member.map(Item::Member),
         inline_object,
     ));
@@ -108,11 +108,11 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
         .collect::<Vec<_>>()
         .map_with(|items, e| {
             let mut members = Vec::new();
-            let mut directives = Vec::new();
+            let mut annotations = Vec::new();
             for i in items {
                 match i {
                     Item::Member(m) => members.push(m),
-                    Item::Directive(d) => directives.push(d),
+                    Item::Annotation(a) => annotations.push(a),
                     Item::Object(mut objs) => members.append(&mut objs),
                 }
             }
@@ -121,7 +121,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
                     span: e.span(),
                     kind: ValueKind::Object(members),
                 },
-                directives,
+                annotations,
             }
         });
 
@@ -129,7 +129,7 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
         top_object,
         value.map(|v| Document {
             value: v,
-            directives: Vec::new(),
+            annotations: Vec::new(),
         }),
     ))
     .padded_by(ws)
