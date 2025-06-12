@@ -69,7 +69,7 @@ const parser: StreamParser<State> = {
       return 'bracket'
     }
 
-    if (stream.match(/[{},\[\]]/)) return 'bracket'
+    if (stream.match(/[{},[\]]/)) return 'bracket'
 
     if (stream.match(/:/)) return 'operator'
 
@@ -81,7 +81,7 @@ const parser: StreamParser<State> = {
 
   indent(state: State, textAfter: string) {
     let level = state.indent
-    if (/^[\}\]]/.test(textAfter)) level--
+    if (/^[}\]]/.test(textAfter)) level--
     return Math.max(0, level) * 2
   },
 }

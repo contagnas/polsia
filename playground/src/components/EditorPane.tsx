@@ -1,22 +1,21 @@
 import CodeMirror from '@uiw/react-codemirror'
 import type { Extension } from '@codemirror/state'
 import { codeMirrorTheme } from '../cmTheme'
+import { isEditorMode, type EditorMode } from '../editor'
 import type { FC } from 'react'
 
 interface Props {
-  theme: 'dark' | 'light'
   src: string
   examples: readonly (readonly [string, string])[]
   selected: number
   onSelect: (idx: number) => void
-  editor: 'basic' | 'vim' | 'emacs'
-  onEditorChange: (v: 'basic' | 'vim' | 'emacs') => void
+  editor: EditorMode
+  onEditorChange: (v: EditorMode) => void
   extensions: Extension[]
   onChange: (src: string) => void
 }
 
 const EditorPane: FC<Props> = ({
-  theme,
   src,
   examples,
   selected,
@@ -61,7 +60,10 @@ const EditorPane: FC<Props> = ({
         <select
           className="ml-2 border border-variable bg-background text-fg"
           value={editor}
-          onChange={(e) => onEditorChange(e.target.value as any)}
+          onChange={(e) => {
+            const value = e.target.value
+            if (isEditorMode(value)) onEditorChange(value)
+          }}
         >
           <option value="basic" className="bg-background text-fg">
             Basic

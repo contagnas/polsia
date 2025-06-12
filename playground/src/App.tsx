@@ -3,6 +3,7 @@ import { polsia } from './polsia'
 import { vim } from '@replit/codemirror-vim'
 import { emacs } from '@replit/codemirror-emacs'
 import type { Extension } from '@codemirror/state'
+import { isEditorMode, type EditorMode } from './editor'
 import * as wasm from 'polsia'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -22,10 +23,9 @@ const DEFAULT_SRC = examples[DEFAULT_INDEX][1]
 
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
-  const [editor, setEditor] = useState<'basic' | 'vim' | 'emacs'>(() => {
+  const [editor, setEditor] = useState<EditorMode>(() => {
     const saved = localStorage.getItem('editor')
-    if (saved === 'basic' || saved === 'vim' || saved === 'emacs')
-      return saved as any
+    if (isEditorMode(saved)) return saved
     return 'basic'
   })
   const [output, setOutput] = useState('Loading...')
@@ -58,13 +58,10 @@ function App() {
 
   const extensions: Extension[] = [polsia()]
   if (editor === 'vim') {
-    extensions.unshift(vim({ status: true } as any))
+    extensions.unshift(vim({ status: true }))
   } else if (editor === 'emacs') {
     extensions.unshift(emacs())
   }
-
-  let styles = getComputedStyle(document.documentElement)
-  let shadow = styles.getPropertyValue('--color-accent')
 
   return (
     <div
@@ -76,7 +73,6 @@ function App() {
       />
       <div className="flex flex-col md:flex-row flex-1 overflow-hidden gap-1">
         <EditorPane
-          theme={theme}
           src={src}
           examples={examples}
           selected={selected}
@@ -93,7 +89,7 @@ function App() {
             update(v)
           }}
         />
-        <OutputPane theme={theme} output={output} error={error} />
+        <OutputPane output={output} error={error} />
       </div>
       <Footer error={error} />
     </div>

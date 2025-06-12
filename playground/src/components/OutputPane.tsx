@@ -4,12 +4,11 @@ import { codeMirrorTheme, errorOutputTheme } from '../cmTheme'
 import type { FC } from 'react'
 
 interface Props {
-  theme: 'dark' | 'light'
   output: string
   error: boolean
 }
 
-const OutputPane: FC<Props> = ({ theme, output, error }) => (
+const OutputPane: FC<Props> = ({ output, error }) => (
   <div className="flex flex-col flex-1 overflow-hidden">
     <div className="flex items-center justify-between p-1 text-keyword border-b border-variable h-6 flex-none sticky top-0 z-10 bg-panel">
       <span>JSON Output</span>
