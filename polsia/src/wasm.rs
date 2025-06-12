@@ -1,4 +1,4 @@
-use crate::{apply_annotations_spanned, document, unify_tree};
+use crate::{document, unify_tree};
 use ariadne::{Color, Config, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -26,7 +26,7 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
             None
         }
         ValueKind::Object(members) => {
-            for (_, v, _) in members {
+            for (_, v, _, _) in members {
                 if let Some(res) = find_unresolved(v) {
                     return Some(res);
                 }
@@ -43,8 +43,7 @@ pub fn polsia_to_json(src: &str) -> Result<String, String> {
     let parse_result = document().parse(src).into_result();
     match parse_result {
         Ok(doc) => match unify_tree(&doc.value) {
-            Ok(mut value) => {
-                apply_annotations_spanned(&mut value, &doc.annotations);
+            Ok(value) => {
                 if let Some((span, t)) = find_unresolved(&value) {
                     let msg = format!("value of type {} is unspecified", t);
                     let span_range = span.into_range();

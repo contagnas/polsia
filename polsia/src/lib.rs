@@ -3,10 +3,7 @@ pub mod types;
 pub mod unify;
 
 pub use parser::{document, parser};
-pub use types::{
-    Annotation, Document, SpannedValue, ValType, Value, ValueKind, apply_annotations,
-    apply_annotations_spanned,
-};
+pub use types::{Annotation, Document, SpannedValue, ValType, Value, ValueKind};
 pub use unify::{UnifyError, unify_spanned, unify_tree};
 
 #[cfg(feature = "wasm")]
@@ -48,7 +45,7 @@ mod tests {
                 Object(members) => ValueKind::Object(
                     members
                         .into_iter()
-                        .map(|(k, v)| (k, span_value(v), span))
+                        .map(|(k, v)| (k, span_value(v), span, Vec::new()))
                         .collect(),
                 ),
                 Reference(r) => ValueKind::Reference(r),
@@ -437,13 +434,13 @@ mod tests {
             ValueKind::Object(members) => {
                 let foo = members
                     .iter()
-                    .find(|(k, _, _)| k == "foo")
+                    .find(|(k, _, _, _)| k == "foo")
                     .unwrap()
                     .1
                     .clone();
                 let bar = members
                     .iter()
-                    .find(|(k, _, _)| k == "bar")
+                    .find(|(k, _, _, _)| k == "bar")
                     .unwrap()
                     .1
                     .clone();
@@ -558,8 +555,7 @@ my_float: 3.1415";
             }
             let src = std::fs::read_to_string(&path).unwrap();
             let doc = document().parse(&src).into_result().unwrap();
-            let mut unified = unify_tree(&doc.value).unwrap();
-            apply_annotations_spanned(&mut unified, &doc.annotations);
+            let unified = unify_tree(&doc.value).unwrap();
             let json = unified.to_value().to_pretty_string();
             assert!(!json.is_empty());
         }
@@ -570,8 +566,10 @@ my_float: 3.1415";
         let src = "foo: 1\nbar: 2\nbar: @NoExport";
         let doc = document().parse(src).into_result().unwrap();
         let unified = unify_tree(&doc.value).unwrap();
-        let val = apply_annotations(unified.to_value(), &doc.annotations);
-        assert_eq!(val, Value::Object(vec![("foo".into(), Value::Int(1))]));
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![("foo".into(), Value::Int(1))])
+        );
     }
 
     #[test]
@@ -589,8 +587,7 @@ my_float: 3.1415";
             forest: age: 4
         "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -618,8 +615,7 @@ my_float: 3.1415";
             baz: bar: ""
         "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -639,8 +635,7 @@ credentials: {
 }
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -660,8 +655,7 @@ credentials: {
 }
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -871,13 +865,12 @@ Pet: {
 pet: Pet
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         match &unified.kind {
             ValueKind::Object(members) => {
                 let pet = members
                     .iter()
-                    .find(|(k, _, _)| k == "pet")
+                    .find(|(k, _, _, _)| k == "pet")
                     .unwrap()
                     .1
                     .clone();
@@ -914,8 +907,7 @@ pet: species: "cat"
 pet: says: "meow"
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(

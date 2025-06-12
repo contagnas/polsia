@@ -1,4 +1,4 @@
-use crate::types::{Document, Span, SpannedValue, ValType, ValueKind};
+use crate::types::{Annotation, Document, Span, SpannedValue, ValType, ValueKind};
 use chumsky::prelude::*;
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 
@@ -46,20 +46,23 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
     let member = key_span
         .then_ignore(just(':').padded_by(ws))
         .then(spanned_value_no_pad())
-        .map(|((k, k_span), mut v): ((String, Span), SpannedValue)| {
-            let span = SimpleSpan::new((), k_span.start()..v.span.end());
-            v.span = span;
-            (k, v, span)
-        });
+        .map(
+            |((k, k_span), (mut v, anns)): ((String, Span), (SpannedValue, Vec<Annotation>))| {
+                let span = SimpleSpan::new((), k_span.start()..v.span.end());
+                v.span = span;
+                (k, v, span, anns)
+            },
+        );
 
     #[derive(Debug)]
     enum Item {
-        Member((String, SpannedValue, Span)),
-        Object(Vec<(String, SpannedValue, Span)>),
+        Member((String, SpannedValue, Span, Vec<Annotation>)),
+        Object(Vec<(String, SpannedValue, Span, Vec<Annotation>)>),
     }
 
     let comma = just(',').then_ignore(ws).ignored();
     let inline_object = spanned_value_no_pad()
+        .map(|(v, _)| v)
         .filter(|v: &SpannedValue| matches!(v.kind, ValueKind::Object(_)))
         .map(|v| {
             if let ValueKind::Object(m) = v.kind {
@@ -87,22 +90,12 @@ pub fn document<'a>() -> impl Parser<'a, &'a str, Document, extra::Err<Rich<'a, 
                     span: e.span(),
                     kind: ValueKind::Object(members),
                 },
-                annotations: Vec::new(),
             }
         });
 
-    choice((
-        top_object,
-        value.map(|v| Document {
-            value: v,
-            annotations: Vec::new(),
-        }),
-    ))
-    .padded_by(ws)
-    .map(|mut d| {
-        d.annotations = crate::types::extract_annotations(&mut d.value);
-        d
-    })
+    choice((top_object, value.map(|v| Document { value: v })))
+        .padded_by(ws)
+        .map(|d| d)
 }
 
 pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
@@ -110,7 +103,7 @@ pub fn parser<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a
 }
 
 fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>> {
-    spanned_value_no_pad().padded_by(
+    spanned_value_no_pad().map(|(v, _)| v).padded_by(
         choice((
             text::whitespace().at_least(1).ignored(),
             just('#')
@@ -123,8 +116,8 @@ fn spanned_value<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich
     )
 }
 
-fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::Err<Rich<'a, char>>>
-{
+fn spanned_value_no_pad<'a>()
+-> impl Parser<'a, &'a str, (SpannedValue, Vec<Annotation>), extra::Err<Rich<'a, char>>> {
     recursive(|value| {
         let comment = just('#')
             .then(none_of('\n').repeated())
@@ -157,10 +150,13 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                 } else {
                     ValueKind::Int(s.parse().unwrap())
                 };
-                SpannedValue {
-                    span: e.span(),
-                    kind,
-                }
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind,
+                    },
+                    Vec::new(),
+                )
             });
 
         let escape = just('\\').ignore_then(choice((
@@ -182,23 +178,33 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             .repeated()
             .collect::<String>()
             .delimited_by(just('"'), just('"'))
-            .map_with(|s: String, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::String(s),
+            .map_with(|s: String, e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::String(s),
+                    },
+                    Vec::new(),
+                )
             });
 
         let array = value
             .clone()
             .separated_by(just(',').padded_by(ws))
             .allow_trailing()
-            .collect()
+            .collect::<Vec<_>>()
             .delimited_by(just('[').padded_by(ws), ws.then_ignore(just(']')))
-            .map_with(|vals, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Array(vals),
+            .map_with(|vals, e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::Array(vals.into_iter().map(|(v, _)| v).collect()),
+                    },
+                    Vec::new(),
+                )
             });
 
-        let key_string = string.map(|j| {
+        let key_string = string.map(|(j, _)| {
             if let SpannedValue {
                 kind: ValueKind::String(s),
                 ..
@@ -216,20 +222,30 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
         let member = key_span
             .then_ignore(just(':').padded_by(ws))
             .then(value.clone())
-            .map(|((k, k_span), mut v): ((String, Span), SpannedValue)| {
-                let span = SimpleSpan::new((), k_span.start()..v.span.end());
-                v.span = span;
-                (k, v, span)
-            });
+            .map(
+                |((k, k_span), (mut v, anns)): (
+                    (String, Span),
+                    (SpannedValue, Vec<Annotation>),
+                )| {
+                    let span = SimpleSpan::new((), k_span.start()..v.span.end());
+                    v.span = span;
+                    (k, v, span, anns)
+                },
+            );
         let comma = just(',').then_ignore(ws).ignored();
         let object = member
             .separated_by(choice((comma, ws1)))
             .allow_trailing()
             .collect::<Vec<_>>()
             .delimited_by(just('{').padded_by(ws), ws.then_ignore(just('}')))
-            .map_with(|members, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Object(members),
+            .map_with(|members, e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::Object(members),
+                    },
+                    Vec::new(),
+                )
             });
 
         let chain = key_span
@@ -238,15 +254,15 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             .at_least(1)
             .collect::<Vec<_>>()
             .then(value.clone())
-            .map(|(keys, mut v)| {
+            .map(|(keys, (mut v, anns))| {
                 for (k, k_span) in keys.into_iter().rev() {
                     let span = SimpleSpan::new((), k_span.start()..v.span.end());
                     v = SpannedValue {
                         span,
-                        kind: ValueKind::Object(vec![(k, v, span)]),
+                        kind: ValueKind::Object(vec![(k, v, span, anns.clone())]),
                     };
                 }
-                v
+                (v, Vec::new())
             });
 
         let reference = text::ident()
@@ -270,62 +286,96 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
                         | "Boolean"
                 )
             })
-            .map_with(|s: String, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Reference(s),
+            .map_with(|s: String, e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::Reference(s),
+                    },
+                    Vec::new(),
+                )
+            });
+
+        let annotation = just('@')
+            .ignore_then(text::keyword("NoExport"))
+            .map_with(|_, e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::Type(ValType::Any),
+                    },
+                    vec![Annotation::NoExport],
+                )
             });
 
         let atom = choice((
-            text::keyword("null").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Null,
-            }),
-            text::keyword("true").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Bool(true),
-            }),
-            text::keyword("false").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Bool(false),
-            }),
-            text::keyword("Any").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Any),
-            }),
-            text::keyword("Nothing").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Nothing),
-            }),
-            text::keyword("Int").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Int),
-            }),
-            text::keyword("Number").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Number),
-            }),
-            text::keyword("Rational").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Rational),
-            }),
-            text::keyword("Float").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Float),
-            }),
-            text::keyword("String").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::String),
-            }),
-            text::keyword("Boolean").map_with(|_, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Type(ValType::Boolean),
-            }),
-            just('@')
-                .ignore_then(text::keyword("NoExport"))
+            text::keyword("null")
                 .map_with(|_, e| SpannedValue {
                     span: e.span(),
-                    kind: ValueKind::NoExport,
-                }),
+                    kind: ValueKind::Null,
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("true")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Bool(true),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("false")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Bool(false),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Any")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Any),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Nothing")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Nothing),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Int")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Int),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Number")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Number),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Rational")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Rational),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Float")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Float),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("String")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::String),
+                })
+                .map(|v| (v, Vec::new())),
+            text::keyword("Boolean")
+                .map_with(|_, e| SpannedValue {
+                    span: e.span(),
+                    kind: ValueKind::Type(ValType::Boolean),
+                })
+                .map(|v| (v, Vec::new())),
+            annotation,
             number,
             string,
             array,
@@ -338,10 +388,15 @@ fn spanned_value_no_pad<'a>() -> impl Parser<'a, &'a str, SpannedValue, extra::E
             .clone()
             .separated_by(just('|').padded_by(ws))
             .at_least(2)
-            .collect()
-            .map_with(|vals, e| SpannedValue {
-                span: e.span(),
-                kind: ValueKind::Union(vals),
+            .collect::<Vec<_>>()
+            .map_with(|vals: Vec<(SpannedValue, Vec<Annotation>)>, e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::Union(vals.into_iter().map(|(v, _)| v).collect()),
+                    },
+                    Vec::new(),
+                )
             });
 
         choice((union, atom))
