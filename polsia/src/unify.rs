@@ -191,7 +191,7 @@ fn unify_union_pairs_spanned(
     span: Span,
     prev_span: Span,
 ) -> Result<SpannedValue, UnifyError> {
-    let mut results = Vec::new();
+    let mut results: Vec<SpannedValue> = Vec::new();
     for ao in a_opts {
         for bo in b_opts {
             if branch_matches(ao, bo, root) && branch_matches(bo, ao, root) {
@@ -226,12 +226,16 @@ fn unify_union_against_spanned(
     span: Span,
     prev_span: Span,
 ) -> Result<SpannedValue, UnifyError> {
-    let mut results = Vec::new();
+    let mut results: Vec<SpannedValue> = Vec::new();
     for o in opts {
         if branch_matches(o, other, root) {
-            let res = unify_spanned_inner(o, other, path, root, seen);
-            if let Ok(res) = res {
-                results.push(res);
+            if let Ok(res) = unify_spanned_inner(o, other, path, root, seen) {
+                if res.to_value() == other.to_value() {
+                    return Ok(res);
+                }
+                if !results.iter().any(|r| r.to_value() == res.to_value()) {
+                    results.push(res);
+                }
             }
         }
     }

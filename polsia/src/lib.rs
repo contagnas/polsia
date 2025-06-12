@@ -885,4 +885,10 @@ pet: says: "meow"
             )])
         );
     }
+
+    #[test]
+    fn duplicate_union_branch_unifies() {
+        let src = "foo: true | true\nfoo: true";
+        must_unify(src);
+    }
 }
