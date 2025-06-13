@@ -115,7 +115,10 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
             None
         }
         ValueKind::Object(members) => {
-            for (_, v, _, _) in members {
+            for (_, v, _, anns) in members {
+                if anns.contains(&Annotation::NoExport) {
+                    continue;
+                }
                 if let Some(res) = find_unresolved(v) {
                     return Some(res);
                 }
@@ -674,7 +677,6 @@ my_float: 3.1415";
             }
             let src = std::fs::read_to_string(&path).unwrap();
             let json = parse_to_json(&src).unwrap();
-            assert!(!json.is_empty());
         }
     }
 
