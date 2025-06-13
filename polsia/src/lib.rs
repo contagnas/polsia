@@ -1134,4 +1134,25 @@ foo: increment two
             _ => panic!("expected object"),
         }
     }
+
+    #[test]
+    fn call_increment_nested_reference() {
+        let src = r#"
+my: favorite: number: 2
+foo: increment my.favorite.number
+"#;
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let foo = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "foo")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(foo.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
+    }
 }
