@@ -1,7 +1,7 @@
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use polsia::types::Span;
-use polsia::{SpannedValue, ValueKind, apply_annotations_spanned, document, unify_tree};
+use polsia::{SpannedValue, ValueKind, document, unify_tree};
 use std::{env, fs};
 
 fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
@@ -25,7 +25,7 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
             None
         }
         ValueKind::Object(members) => {
-            for (_, v, _) in members {
+            for (_, v, _, _) in members {
                 if let Some(res) = find_unresolved(v) {
                     return Some(res);
                 }
@@ -42,8 +42,7 @@ fn main() {
     let parse_result = document().parse(&src).into_result();
     match parse_result {
         Ok(doc) => match unify_tree(&doc.value) {
-            Ok(mut value) => {
-                apply_annotations_spanned(&mut value, &doc.annotations);
+            Ok(value) => {
                 if let Some((span, t)) = find_unresolved(&value) {
                     let msg = format!("value of type {} is unspecified", t);
                     let span_range = span.into_range();

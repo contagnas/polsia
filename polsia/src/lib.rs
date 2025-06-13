@@ -3,11 +3,128 @@ pub mod types;
 pub mod unify;
 
 pub use parser::{document, parser};
-pub use types::{
-    Annotation, Document, SpannedValue, ValType, Value, ValueKind, apply_annotations,
-    apply_annotations_spanned,
-};
+pub use types::{Annotation, Document, SpannedValue, ValType, Value, ValueKind};
 pub use unify::{UnifyError, unify_spanned, unify_tree};
+
+use crate::types::Span;
+use ariadne::{Color, Config, Label, Report, ReportKind, sources};
+use chumsky::prelude::*;
+
+pub fn parse_to_json(src: &str) -> Result<String, String> {
+    let filename = "input".to_string();
+    let parse_result = document().parse(src).into_result();
+    match parse_result {
+        Ok(doc) => match unify_tree(&doc.value) {
+            Ok(value) => match find_unresolved(&value) {
+                Some((span, t)) => {
+                    let msg = format!("value of type {} is unspecified", t);
+                    let span_range = span.into_range();
+                    let mut buf = Vec::new();
+                    Report::build(ReportKind::Error, (filename.clone(), span_range.clone()))
+                        .with_config(Config::default().with_color(false))
+                        .with_message(&msg)
+                        .with_label(
+                            Label::new((filename.clone(), span_range))
+                                .with_message(&msg)
+                                .with_color(Color::Red),
+                        )
+                        .finish()
+                        .write(sources([(filename.clone(), src)]), &mut buf)
+                        .unwrap();
+                    Err(String::from_utf8(buf).unwrap())
+                }
+                None => Ok(value.to_value().to_pretty_string()),
+            },
+            Err(err) => {
+                use chumsky::error::LabelError;
+                let mut e = Rich::custom(err.span, err.msg.clone());
+                <Rich<_> as LabelError<&str, _>>::in_context(
+                    &mut e,
+                    "previous value here",
+                    err.prev_span,
+                );
+                let span = (*e.span()).into_range();
+                let msg = e.to_string();
+                let mut buf = Vec::new();
+                Report::build(ReportKind::Error, (filename.clone(), span.clone()))
+                    .with_config(Config::default().with_color(false))
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((filename.clone(), span.clone()))
+                            .with_message(&msg)
+                            .with_color(Color::Red),
+                    )
+                    .with_labels(e.contexts().map(|(label, span)| {
+                        Label::new((filename.clone(), span.into_range()))
+                            .with_message(label.to_string())
+                            .with_color(Color::Yellow)
+                    }))
+                    .finish()
+                    .write(sources([(filename.clone(), src)]), &mut buf)
+                    .unwrap();
+                Err(String::from_utf8(buf).unwrap())
+            }
+        },
+        Err(errs) => {
+            let mut out = String::new();
+            for e in errs {
+                let span = (*e.span()).into_range();
+                let msg = e.to_string();
+                let mut buf = Vec::new();
+                Report::build(ReportKind::Error, (filename.clone(), span.clone()))
+                    .with_config(Config::default().with_color(false))
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((filename.clone(), span.clone()))
+                            .with_message(&msg)
+                            .with_color(Color::Red),
+                    )
+                    .with_labels(e.contexts().map(|(label, span)| {
+                        Label::new((filename.clone(), span.into_range()))
+                            .with_message(label.to_string())
+                            .with_color(Color::Yellow)
+                    }))
+                    .finish()
+                    .write(sources([(filename.clone(), src)]), &mut buf)
+                    .unwrap();
+                out.push_str(&String::from_utf8(buf).unwrap());
+            }
+            Err(out)
+        }
+    }
+}
+
+fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
+    match &value.kind {
+        ValueKind::Reference(p) => Some((value.span, format!("reference {}", p))),
+        ValueKind::Type(t) => Some((value.span, format!("{:?}", t))),
+        ValueKind::Union(items) => {
+            for item in items {
+                if let Some(res) = find_unresolved(item) {
+                    return Some(res);
+                }
+            }
+            Some((value.span, "union".into()))
+        }
+        ValueKind::Array(items) => {
+            for item in items {
+                if let Some(res) = find_unresolved(item) {
+                    return Some(res);
+                }
+            }
+            None
+        }
+        ValueKind::Object(members) => {
+            for (_, v, _, _) in members {
+                if let Some(res) = find_unresolved(v) {
+                    return Some(res);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
 
 #[cfg(feature = "wasm")]
 pub mod wasm;
@@ -18,7 +135,6 @@ pub use wasm::polsia_to_json;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chumsky::prelude::*;
 
     fn parse_unify(src: &str) -> Result<SpannedValue, UnifyError> {
         let parsed = parser().parse(src).into_result().unwrap();
@@ -48,7 +164,7 @@ mod tests {
                 Object(members) => ValueKind::Object(
                     members
                         .into_iter()
-                        .map(|(k, v)| (k, span_value(v), span))
+                        .map(|(k, v)| (k, span_value(v), span, Vec::new()))
                         .collect(),
                 ),
                 Reference(r) => ValueKind::Reference(r),
@@ -437,13 +553,13 @@ mod tests {
             ValueKind::Object(members) => {
                 let foo = members
                     .iter()
-                    .find(|(k, _, _)| k == "foo")
+                    .find(|(k, _, _, _)| k == "foo")
                     .unwrap()
                     .1
                     .clone();
                 let bar = members
                     .iter()
-                    .find(|(k, _, _)| k == "bar")
+                    .find(|(k, _, _, _)| k == "bar")
                     .unwrap()
                     .1
                     .clone();
@@ -558,8 +674,7 @@ my_float: 3.1415";
             }
             let src = std::fs::read_to_string(&path).unwrap();
             let doc = document().parse(&src).into_result().unwrap();
-            let mut unified = unify_tree(&doc.value).unwrap();
-            apply_annotations_spanned(&mut unified, &doc.annotations);
+            let unified = unify_tree(&doc.value).unwrap();
             let json = unified.to_value().to_pretty_string();
             assert!(!json.is_empty());
         }
@@ -570,8 +685,10 @@ my_float: 3.1415";
         let src = "foo: 1\nbar: 2\nbar: @NoExport";
         let doc = document().parse(src).into_result().unwrap();
         let unified = unify_tree(&doc.value).unwrap();
-        let val = apply_annotations(unified.to_value(), &doc.annotations);
-        assert_eq!(val, Value::Object(vec![("foo".into(), Value::Int(1))]));
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![("foo".into(), Value::Int(1))])
+        );
     }
 
     #[test]
@@ -589,8 +706,7 @@ my_float: 3.1415";
             forest: age: 4
         "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -618,8 +734,7 @@ my_float: 3.1415";
             baz: bar: ""
         "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -639,8 +754,7 @@ credentials: {
 }
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -660,8 +774,7 @@ credentials: {
 }
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -871,13 +984,12 @@ Pet: {
 pet: Pet
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         match &unified.kind {
             ValueKind::Object(members) => {
                 let pet = members
                     .iter()
-                    .find(|(k, _, _)| k == "pet")
+                    .find(|(k, _, _, _)| k == "pet")
                     .unwrap()
                     .1
                     .clone();
@@ -914,8 +1026,7 @@ pet: species: "cat"
 pet: says: "meow"
 "#;
         let doc = document().parse(src).into_result().unwrap();
-        let mut unified = unify_tree(&doc.value).unwrap();
-        apply_annotations_spanned(&mut unified, &doc.annotations);
+        let unified = unify_tree(&doc.value).unwrap();
         assert_eq!(
             unified.to_value(),
             Value::Object(vec![(
@@ -932,5 +1043,12 @@ pet: says: "meow"
     fn duplicate_union_branch_unifies() {
         let src = "foo: true | true\nfoo: true";
         must_unify(src);
+    }
+
+    #[test]
+    fn export_error_for_unresolved_type() {
+        let src = "foo: Int";
+        let err = parse_to_json(src).unwrap_err();
+        assert!(err.contains("Int"));
     }
 }

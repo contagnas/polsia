@@ -1,4 +1,4 @@
-use crate::types::{Span, SpannedValue, ValType, Value, ValueKind};
+use crate::types::{Annotation, Span, SpannedValue, ValType, Value, ValueKind};
 use chumsky::span::{SimpleSpan, Span as ChumSpan};
 use std::collections::BTreeMap;
 
@@ -25,7 +25,7 @@ fn branch_matches(
     match (branch_kind, value_kind) {
         (Some(ValueKind::Object(bm)), Some(ValueKind::Object(vm))) => vm
             .iter()
-            .all(|(vk, _, _)| bm.iter().any(|(k, _, _)| k == vk)),
+            .all(|(vk, _, _, _)| bm.iter().any(|(k, _, _, _)| k == vk)),
         (Some(ValueKind::Type(bt)), Some(ValueKind::Type(vt))) => bt == vt,
         _ => true,
     }
@@ -144,36 +144,39 @@ fn unify_array_spanned(
 }
 
 fn unify_object_spanned(
-    a_members: &[(String, SpannedValue, Span)],
-    b_members: &[(String, SpannedValue, Span)],
+    a_members: &[(String, SpannedValue, Span, Vec<Annotation>)],
+    b_members: &[(String, SpannedValue, Span, Vec<Annotation>)],
     path: &str,
     root: &BTreeMap<String, SpannedValue>,
     seen: &mut std::collections::HashSet<String>,
     span: Span,
 ) -> Result<SpannedValue, UnifyError> {
     use std::collections::BTreeMap;
-    let mut map: BTreeMap<String, SpannedValue> = BTreeMap::new();
-    for (k, v, _) in a_members {
-        map.insert(k.clone(), v.clone());
+    let mut map: BTreeMap<String, (SpannedValue, Vec<Annotation>)> = BTreeMap::new();
+    for (k, v, _, anns) in a_members {
+        map.insert(k.clone(), (v.clone(), anns.clone()));
     }
-    for (k, v, _) in b_members {
-        let new = if let Some(prev) = map.get(k) {
+    for (k, v, _, anns) in b_members {
+        let (new_val, new_anns) = if let Some((prev, prev_anns)) = map.get(k) {
             let new_path = if path.is_empty() {
                 k.clone()
             } else {
                 format!("{}.{}", path, k)
             };
-            unify_spanned_inner(prev, v, &new_path, root, seen)?
+            let merged = unify_spanned_inner(prev, v, &new_path, root, seen)?;
+            let mut combined = prev_anns.clone();
+            combined.extend(anns.clone());
+            (merged, combined)
         } else {
-            v.clone()
+            (v.clone(), anns.clone())
         };
-        map.insert(k.clone(), new);
+        map.insert(k.clone(), (new_val, new_anns));
     }
     let members = map
         .into_iter()
-        .map(|(k, v)| {
+        .map(|(k, (v, anns))| {
             let span = v.span;
-            (k, v, span)
+            (k, v, span, anns)
         })
         .collect();
     Ok(SpannedValue {
@@ -269,8 +272,8 @@ fn lookup<'a>(root: &'a BTreeMap<String, SpannedValue>, path: &str) -> Option<&'
     let mut current = root.get(first)?;
     for seg in segments {
         match &current.kind {
-            ValueKind::Object(members) => match members.iter().find(|(k, _, _)| k == seg) {
-                Some((_, v, _)) => current = v,
+            ValueKind::Object(members) => match members.iter().find(|(k, _, _, _)| k == seg) {
+                Some((_, v, _, _)) => current = v,
                 None => return None,
             },
             _ => return None,
@@ -302,8 +305,6 @@ fn unify_spanned_inner(
         return Ok(b.clone());
     }
     match (&a.kind, &b.kind) {
-        (ValueKind::NoExport, _) => Ok(b.clone()),
-        (_, ValueKind::NoExport) => Ok(a.clone()),
         (ValueKind::Reference(pa), _) => {
             if !seen.insert(pa.clone()) {
                 return Ok(b.clone());
@@ -417,10 +418,11 @@ fn unify_tree_inner(
             // Preserve the order keys first appear for stable output. Unification
             // itself must not depend on field order.
             let mut indices: HashMap<String, usize> = HashMap::new();
-            let mut out: Vec<(String, SpannedValue, Span)> = Vec::new();
+            let mut out: Vec<(String, SpannedValue, Span, Vec<Annotation>)> = Vec::new();
             let mut all_values: HashMap<String, Vec<SpannedValue>> = HashMap::new();
+            let mut all_annotations: HashMap<String, Vec<Annotation>> = HashMap::new();
 
-            for (k, v, span) in members {
+            for (k, v, span, anns) in members {
                 let new_path = if path.is_empty() {
                     k.clone()
                 } else {
@@ -431,12 +433,16 @@ fn unify_tree_inner(
                     .entry(k.clone())
                     .or_default()
                     .push(unified_v.clone());
+                all_annotations
+                    .entry(k.clone())
+                    .or_default()
+                    .extend(anns.clone());
                 if let Some(&i) = indices.get(k) {
                     // already recorded first occurrence
                     let _ = i; // suppress unused warning in some compilers
                 } else {
                     indices.insert(k.clone(), out.len());
-                    out.push((k.clone(), unified_v.clone(), *span));
+                    out.push((k.clone(), unified_v.clone(), *span, anns.clone()));
                     if is_root {
                         root.insert(k.clone(), unified_v.clone());
                     }
@@ -469,6 +475,11 @@ fn unify_tree_inner(
                 }
             }
 
+            for (k, anns) in all_annotations {
+                let i = indices[&k];
+                out[i].3 = anns;
+            }
+
             Ok(SpannedValue {
                 span: value.span,
                 kind: ValueKind::Object(out),
@@ -481,7 +492,7 @@ fn unify_tree_inner(
 pub fn unify_tree(value: &SpannedValue) -> Result<SpannedValue, UnifyError> {
     let mut root: BTreeMap<String, SpannedValue> = BTreeMap::new();
     if let ValueKind::Object(members) = &value.kind {
-        for (k, v, _) in members {
+        for (k, v, _, _) in members {
             root.insert(k.clone(), v.clone());
         }
     }
@@ -549,14 +560,14 @@ fn resolve_refs_inner(
         }
         ValueKind::Object(members) => {
             let mut out = Vec::new();
-            for (k, v, span) in members {
+            for (k, v, span, anns) in members {
                 let new_path = if path.is_empty() {
                     k.clone()
                 } else {
                     format!("{}.{}", path, k)
                 };
                 let resolved = resolve_refs_inner(v, &new_path, root, seen)?;
-                out.push((k.clone(), resolved, *span));
+                out.push((k.clone(), resolved, *span, anns.clone()));
             }
             Ok(SpannedValue {
                 span: value.span,
@@ -592,6 +603,7 @@ fn value_to_kind(j: Value) -> ValueKind {
                             kind: value_to_kind(v),
                         },
                         SimpleSpan::new((), 0..0),
+                        Vec::new(),
                     )
                 })
                 .collect(),
@@ -620,12 +632,12 @@ fn kind_to_value(k: &ValueKind) -> Value {
         ValueKind::Array(arr) => Value::Array(arr.iter().map(|v| v.to_value()).collect()),
         ValueKind::Object(obj) => Value::Object(
             obj.iter()
-                .map(|(k, v, _)| (k.clone(), v.to_value()))
+                .filter(|(_, _, _, anns)| !anns.contains(&Annotation::NoExport))
+                .map(|(k, v, _, _)| (k.clone(), v.to_value()))
                 .collect(),
         ),
         ValueKind::Reference(r) => Value::Reference(r.clone()),
         ValueKind::Type(t) => Value::Type(t.clone()),
         ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
-        ValueKind::NoExport => panic!("NoExport annotation should be removed before conversion"),
     }
 }

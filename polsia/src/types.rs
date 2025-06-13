@@ -19,13 +19,12 @@ pub enum Value {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Annotation {
-    NoExport(String),
+    NoExport,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
     pub value: SpannedValue,
-    pub annotations: Vec<Annotation>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,11 +41,10 @@ pub enum ValueKind {
     Float(f64),
     String(String),
     Array(Vec<SpannedValue>),
-    Object(Vec<(String, SpannedValue, Span)>),
+    Object(Vec<(String, SpannedValue, Span, Vec<Annotation>)>),
     Reference(String),
     Type(ValType),
     Union(Vec<SpannedValue>),
-    NoExport,
 }
 
 impl SpannedValue {
@@ -60,15 +58,13 @@ impl SpannedValue {
             ValueKind::Array(a) => Value::Array(a.iter().map(|j| j.to_value()).collect()),
             ValueKind::Object(m) => Value::Object(
                 m.iter()
-                    .map(|(k, v, _)| (k.clone(), v.to_value()))
+                    .filter(|(_, _, _, anns)| !anns.contains(&Annotation::NoExport))
+                    .map(|(k, v, _, _)| (k.clone(), v.to_value()))
                     .collect(),
             ),
             ValueKind::Reference(r) => Value::Reference(r.clone()),
             ValueKind::Type(t) => Value::Type(t.clone()),
             ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
-            ValueKind::NoExport => {
-                panic!("NoExport annotation should be removed before conversion")
-            }
         }
     }
 }
@@ -108,84 +104,4 @@ pub enum ValType {
     Float,
     String,
     Boolean,
-}
-
-fn remove_path(value: &mut Value, parts: &[&str]) {
-    if parts.is_empty() {
-        return;
-    }
-    if let Value::Object(members) = value {
-        if let Some(pos) = members.iter().position(|(k, _)| k == parts[0]) {
-            if parts.len() == 1 {
-                members.remove(pos);
-            } else {
-                remove_path(&mut members[pos].1, &parts[1..]);
-            }
-        }
-    }
-}
-
-pub fn apply_annotations(mut value: Value, annotations: &[Annotation]) -> Value {
-    for a in annotations {
-        match a {
-            Annotation::NoExport(path) => {
-                let parts: Vec<&str> = path.split('.').collect();
-                remove_path(&mut value, &parts);
-            }
-        }
-    }
-    value
-}
-
-fn remove_path_spanned(value: &mut SpannedValue, parts: &[&str]) {
-    if parts.is_empty() {
-        return;
-    }
-    if let ValueKind::Object(members) = &mut value.kind {
-        if let Some(pos) = members.iter().position(|(k, _, _)| k == parts[0]) {
-            if parts.len() == 1 {
-                members.remove(pos);
-            } else {
-                remove_path_spanned(&mut members[pos].1, &parts[1..]);
-            }
-        }
-    }
-}
-
-pub fn apply_annotations_spanned(value: &mut SpannedValue, annotations: &[Annotation]) {
-    for a in annotations {
-        match a {
-            Annotation::NoExport(path) => {
-                let parts: Vec<&str> = path.split('.').collect();
-                remove_path_spanned(value, &parts);
-            }
-        }
-    }
-}
-
-fn collect_noexport(value: &mut SpannedValue, path: &str, out: &mut Vec<Annotation>) {
-    if let ValueKind::Object(members) = &mut value.kind {
-        let mut i = 0;
-        while i < members.len() {
-            let (k, v, _) = &mut members[i];
-            let new_path = if path.is_empty() {
-                k.clone()
-            } else {
-                format!("{}.{}", path, k)
-            };
-            if matches!(v.kind, ValueKind::NoExport) {
-                out.push(Annotation::NoExport(new_path));
-                members.remove(i);
-            } else {
-                collect_noexport(v, &new_path, out);
-                i += 1;
-            }
-        }
-    }
-}
-
-pub fn extract_annotations(value: &mut SpannedValue) -> Vec<Annotation> {
-    let mut out = Vec::new();
-    collect_noexport(value, "", &mut out);
-    out
 }
