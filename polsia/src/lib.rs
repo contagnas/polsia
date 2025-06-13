@@ -673,9 +673,7 @@ my_float: 3.1415";
                 continue;
             }
             let src = std::fs::read_to_string(&path).unwrap();
-            let doc = document().parse(&src).into_result().unwrap();
-            let unified = unify_tree(&doc.value).unwrap();
-            let json = unified.to_value().to_pretty_string();
+            let json = parse_to_json(&src).unwrap();
             assert!(!json.is_empty());
         }
     }
