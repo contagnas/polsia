@@ -14,6 +14,7 @@ pub enum Value {
     Object(Vec<(String, Value)>),
     Reference(String),
     Type(ValType),
+    Call(String, Box<Value>),
     Union(Vec<Value>),
 }
 
@@ -44,6 +45,7 @@ pub enum ValueKind {
     Object(Vec<(String, SpannedValue, Span, Vec<Annotation>)>),
     Reference(String),
     Type(ValType),
+    Call(String, Box<SpannedValue>),
     Union(Vec<SpannedValue>),
 }
 
@@ -64,6 +66,7 @@ impl SpannedValue {
             ),
             ValueKind::Reference(r) => Value::Reference(r.clone()),
             ValueKind::Type(t) => Value::Type(t.clone()),
+            ValueKind::Call(name, arg) => Value::Call(name.clone(), Box::new(arg.to_value())),
             ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
         }
     }
@@ -85,6 +88,7 @@ impl Value {
             }
             Value::Reference(r) => JsValue::String(r.clone()),
             Value::Type(t) => panic!("unresolved type {:?}", t),
+            Value::Call(name, _) => panic!("unresolved call {}", name),
             Value::Union(_) => panic!("unresolved union"),
         }
     }

@@ -296,6 +296,25 @@ fn spanned_value_no_pad<'a>()
                 )
             });
 
+        let hspace = one_of(" \t").repeated().at_least(1).ignored();
+
+        let call = reference.then_ignore(hspace).then(value.clone()).map_with(
+            |((func, _), (arg, _)), e| {
+                let name = if let ValueKind::Reference(n) = func.kind {
+                    n
+                } else {
+                    unreachable!()
+                };
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::Call(name, Box::new(arg)),
+                    },
+                    Vec::new(),
+                )
+            },
+        );
+
         let annotation = just('@')
             .ignore_then(text::keyword("NoExport"))
             .map_with(|_, e| {
@@ -380,6 +399,7 @@ fn spanned_value_no_pad<'a>()
             string,
             array,
             object,
+            call,
             chain,
             reference,
         ));
