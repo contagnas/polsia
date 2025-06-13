@@ -98,6 +98,7 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
     match &value.kind {
         ValueKind::Reference(p) => Some((value.span, format!("reference {}", p))),
         ValueKind::Type(t) => Some((value.span, format!("{:?}", t))),
+        ValueKind::Call(name, _) => Some((value.span, format!("call {}", name))),
         ValueKind::Union(items) => {
             for item in items {
                 if let Some(res) = find_unresolved(item) {
@@ -172,6 +173,7 @@ mod tests {
                 ),
                 Reference(r) => ValueKind::Reference(r),
                 Type(t) => ValueKind::Type(t),
+                Call(name, arg) => ValueKind::Call(name, Box::new(span_value(*arg))),
                 Union(items) => ValueKind::Union(items.into_iter().map(span_value).collect()),
             },
         }
@@ -1050,5 +1052,86 @@ pet: says: "meow"
         let src = "foo: Int";
         let err = parse_to_json(src).unwrap_err();
         assert!(err.contains("Int"));
+    }
+
+    #[test]
+    fn call_increment_literal() {
+        let src = "foo: increment 2";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let foo = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "foo")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(foo.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn call_increment_reference() {
+        let src = "two: 2\nfoo: increment two";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let foo = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "foo")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(foo.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn call_increment_with_type() {
+        let src = "foo: Int\nfoo: increment 2";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let foo = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "foo")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(foo.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn call_increment_chain() {
+        let src = r#"
+one: Int
+one: 1
+
+two: Int
+two: increment one
+
+foo: Int
+foo: increment two
+"#;
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let foo = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "foo")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(foo.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
     }
 }
