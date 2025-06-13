@@ -99,6 +99,7 @@ fn find_unresolved(value: &SpannedValue) -> Option<(Span, String)> {
         ValueKind::Reference(p) => Some((value.span, format!("reference {}", p))),
         ValueKind::Type(t) => Some((value.span, format!("{:?}", t))),
         ValueKind::Call(name, _) => Some((value.span, format!("call {}", name))),
+        ValueKind::OpCall(op, _, _) => Some((value.span, format!("op {}", op))),
         ValueKind::Union(items) => {
             for item in items {
                 if let Some(res) = find_unresolved(item) {
@@ -174,6 +175,11 @@ mod tests {
                 Reference(r) => ValueKind::Reference(r),
                 Type(t) => ValueKind::Type(t),
                 Call(name, arg) => ValueKind::Call(name, Box::new(span_value(*arg))),
+                OpCall(op, left, right) => ValueKind::OpCall(
+                    op,
+                    Box::new(span_value(*left)),
+                    Box::new(span_value(*right)),
+                ),
                 Union(items) => ValueKind::Union(items.into_iter().map(span_value).collect()),
             },
         }
@@ -1154,5 +1160,88 @@ foo: increment my.favorite.number
             }
             _ => panic!("expected object"),
         }
+    }
+
+    #[test]
+    fn simple_operator() {
+        let src = "two: 1 + 1";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let two = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "two")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(two.to_value(), Value::Int(2));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn operator_with_references() {
+        let src = "one: 1\ntwo: 2\n\nthree: one + two";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let three = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "three")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(three.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn operator_with_function_result() {
+        let src = "two: increment 1\nfour: two + two";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let four = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "four")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(four.to_value(), Value::Int(4));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn operator_nested_references() {
+        let src = "numbers: one: 1\nnumbers: two: numbers.one + numbers.one";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let numbers = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "numbers")
+                    .unwrap()
+                    .1
+                    .clone();
+                if let ValueKind::Object(nm) = numbers.kind {
+                    let two = nm.iter().find(|(k, _, _, _)| k == "two").unwrap().1.clone();
+                    assert_eq!(two.to_value(), Value::Int(2));
+                } else {
+                    panic!("expected object");
+                }
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn operator_multiple_assignments() {
+        let src = "four: 2 + 2\nfour: 5 - 1\nfour: 3 + 1";
+        must_unify(src);
     }
 }

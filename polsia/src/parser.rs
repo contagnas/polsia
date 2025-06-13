@@ -327,7 +327,7 @@ fn spanned_value_no_pad<'a>()
                 )
             });
 
-        let atom = choice((
+        let atom_base = choice((
             text::keyword("null")
                 .map_with(|_, e| SpannedValue {
                     span: e.span(),
@@ -403,6 +403,24 @@ fn spanned_value_no_pad<'a>()
             chain,
             reference,
         ));
+
+        let op = atom_base
+            .clone()
+            .then_ignore(hspace)
+            .then(one_of("+-").map(|c: char| c.to_string()))
+            .then_ignore(hspace)
+            .then(value.clone())
+            .map_with(|(((left, _), op), (right, _)), e| {
+                (
+                    SpannedValue {
+                        span: e.span(),
+                        kind: ValueKind::OpCall(op, Box::new(left), Box::new(right)),
+                    },
+                    Vec::new(),
+                )
+            });
+
+        let atom = choice((op, atom_base));
 
         let union = atom
             .clone()

@@ -145,6 +145,66 @@ fn execute_call(
     }
 }
 
+fn execute_operator(
+    op: &str,
+    left: &SpannedValue,
+    right: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    let l = resolve_refs_inner(left, path, root, seen)?;
+    let r = resolve_refs_inner(right, path, root, seen)?;
+    match op {
+        "+" => match (l.kind, r.kind) {
+            (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Int(a + b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        "-" => match (l.kind, r.kind) {
+            (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Int(a - b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        _ => Err(UnifyError {
+            msg: add_path(path, format!("unknown operator {}", op)),
+            span,
+            prev_span: span,
+        }),
+    }
+}
+
 // Helper utilities used by both spanned and plain unification implementations
 
 fn unify_array_spanned(
@@ -369,6 +429,22 @@ fn unify_spanned_inner(
             seen.remove(pb);
             res
         }
+        (ValueKind::OpCall(op, left, right), _) => {
+            let evaluated = execute_operator(op, left, right, path, root, seen, a.span)?;
+            if matches!(evaluated.kind, ValueKind::OpCall(..)) {
+                Ok(evaluated)
+            } else {
+                unify_spanned_inner(&evaluated, b, path, root, seen)
+            }
+        }
+        (_, ValueKind::OpCall(op, left, right)) => {
+            let evaluated = execute_operator(op, left, right, path, root, seen, b.span)?;
+            if matches!(evaluated.kind, ValueKind::OpCall(..)) {
+                Ok(evaluated)
+            } else {
+                unify_spanned_inner(a, &evaluated, path, root, seen)
+            }
+        }
         (ValueKind::Call(name, arg), _) => {
             let evaluated = execute_call(name, arg, path, root, seen, a.span)?;
             if matches!(evaluated.kind, ValueKind::Call(..)) {
@@ -589,6 +665,9 @@ fn resolve_refs_inner(
             }),
         },
         ValueKind::Call(name, arg) => execute_call(name, arg, path, root, seen, value.span),
+        ValueKind::OpCall(op, left, right) => {
+            execute_operator(op, left, right, path, root, seen, value.span)
+        }
         ValueKind::Array(items) => {
             let mut out = Vec::new();
             for item in items {
@@ -668,6 +747,17 @@ fn value_to_kind(j: Value) -> ValueKind {
                 kind: value_to_kind(*arg),
             }),
         ),
+        Value::OpCall(op, left, right) => ValueKind::OpCall(
+            op,
+            Box::new(SpannedValue {
+                span: SimpleSpan::new((), 0..0),
+                kind: value_to_kind(*left),
+            }),
+            Box::new(SpannedValue {
+                span: SimpleSpan::new((), 0..0),
+                kind: value_to_kind(*right),
+            }),
+        ),
         Value::Union(items) => ValueKind::Union(
             items
                 .into_iter()
@@ -697,6 +787,11 @@ fn kind_to_value(k: &ValueKind) -> Value {
         ValueKind::Reference(r) => Value::Reference(r.clone()),
         ValueKind::Type(t) => Value::Type(t.clone()),
         ValueKind::Call(name, arg) => Value::Call(name.clone(), Box::new(arg.to_value())),
+        ValueKind::OpCall(op, left, right) => Value::OpCall(
+            op.clone(),
+            Box::new(left.to_value()),
+            Box::new(right.to_value()),
+        ),
         ValueKind::Union(items) => Value::Union(items.iter().map(|v| v.to_value()).collect()),
     }
 }
