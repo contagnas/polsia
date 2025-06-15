@@ -1062,7 +1062,9 @@ pet: says: "meow"
 
     #[test]
     fn call_increment_literal() {
-        let src = "foo: increment 2";
+        let src = r#"increment: @Function
+increment: {arg: Int return: native {function: "increment", arg: arg}}
+foo: increment 2"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1080,7 +1082,10 @@ pet: says: "meow"
 
     #[test]
     fn call_increment_reference() {
-        let src = "two: 2\nfoo: increment two";
+        let src = r#"increment: @Function
+increment: {arg: Int return: native {function: "increment", arg: arg}}
+two: 2
+foo: increment two"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1098,7 +1103,10 @@ pet: says: "meow"
 
     #[test]
     fn call_increment_with_type() {
-        let src = "foo: Int\nfoo: increment 2";
+        let src = r#"increment: @Function
+increment: {arg: Int return: native {function: "increment", arg: arg}}
+foo: Int
+foo: increment 2"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1116,7 +1124,8 @@ pet: says: "meow"
 
     #[test]
     fn call_increment_chain() {
-        let src = r#"
+        let src = r#"increment: @Function
+increment: {arg: Int return: native {function: "increment", arg: arg}}
 one: Int
 one: 1
 
@@ -1143,7 +1152,8 @@ foo: increment two
 
     #[test]
     fn call_increment_nested_reference() {
-        let src = r#"
+        let src = r#"increment: @Function
+increment: {arg: Int return: native {function: "increment", arg: arg}}
 my: favorite: number: 2
 foo: increment my.favorite.number
 "#;
@@ -1200,7 +1210,10 @@ foo: increment my.favorite.number
 
     #[test]
     fn operator_with_function_result() {
-        let src = "two: increment 1\nfour: two + two";
+        let src = r#"increment: @Function
+increment: {arg: Int return: native {function: "increment", arg: arg}}
+two: increment 1
+four: two + two"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1243,5 +1256,85 @@ foo: increment my.favorite.number
     fn operator_multiple_assignments() {
         let src = "four: 2 + 2\nfour: 5 - 1\nfour: 3 + 1";
         must_unify(src);
+    }
+
+    #[test]
+    fn boolean_operators() {
+        let src = "a: true and false\nb: true or false";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let a = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "a")
+                    .unwrap()
+                    .1
+                    .clone();
+                let b = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "b")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(a.to_value(), Value::Bool(false));
+                assert_eq!(b.to_value(), Value::Bool(true));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn comparison_operators() {
+        let src = "gt: 2 > 1\nle: 2 <= 1";
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let gt = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "gt")
+                    .unwrap()
+                    .1
+                    .clone();
+                let le = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "le")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(gt.to_value(), Value::Bool(true));
+                assert_eq!(le.to_value(), Value::Bool(false));
+            }
+            _ => panic!("expected object"),
+        }
+    }
+
+    #[test]
+    fn native_functions() {
+        let src = r#"abs_fn: @Function
+abs_fn: {arg: Int return: native {function: "abs", arg: arg}}
+len_fn: @Function
+len_fn: {arg: String return: native {function: "length", arg: arg}}
+a: abs_fn -3
+b: len_fn "abc""#;
+        let unified = must_unify(src);
+        match &unified.kind {
+            ValueKind::Object(members) => {
+                let a = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "a")
+                    .unwrap()
+                    .1
+                    .clone();
+                let b = members
+                    .iter()
+                    .find(|(k, _, _, _)| k == "b")
+                    .unwrap()
+                    .1
+                    .clone();
+                assert_eq!(a.to_value(), Value::Int(3));
+                assert_eq!(b.to_value(), Value::Int(3));
+            }
+            _ => panic!("expected object"),
+        }
     }
 }
