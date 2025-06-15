@@ -316,14 +316,18 @@ fn spanned_value_no_pad<'a>()
         );
 
         let annotation = just('@')
-            .ignore_then(text::keyword("NoExport"))
-            .map_with(|_, e| {
+            .ignore_then(choice((
+                text::keyword("NoExport").to(Annotation::NoExport),
+                text::keyword("Function").to(Annotation::Function),
+                text::keyword("Operator").to(Annotation::Operator),
+            )))
+            .map_with(|ann, e| {
                 (
                     SpannedValue {
                         span: e.span(),
                         kind: ValueKind::Type(ValType::Any),
                     },
-                    vec![Annotation::NoExport],
+                    vec![ann],
                 )
             });
 
@@ -404,10 +408,21 @@ fn spanned_value_no_pad<'a>()
             reference,
         ));
 
+        let operator = choice((
+            just(">=").to(">=".to_string()),
+            just("<=").to("<=".to_string()),
+            just(">").to(">".to_string()),
+            just("<").to("<".to_string()),
+            just("+").to("+".to_string()),
+            just("-").to("-".to_string()),
+            text::keyword("and").to("and".to_string()),
+            text::keyword("or").to("or".to_string()),
+        ));
+
         let op = atom_base
             .clone()
             .then_ignore(hspace)
-            .then(one_of("+-").map(|c: char| c.to_string()))
+            .then(operator)
             .then_ignore(hspace)
             .then(value.clone())
             .map_with(|(((left, _), op), (right, _)), e| {

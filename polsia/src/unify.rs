@@ -111,17 +111,14 @@ fn unify_type_value(t: &ValType, val: &Value) -> Result<Value, String> {
     }
 }
 
-fn execute_call(
+fn execute_native(
     name: &str,
-    arg: &SpannedValue,
+    arg: SpannedValue,
     path: &str,
-    root: &BTreeMap<String, SpannedValue>,
-    seen: &mut std::collections::HashSet<String>,
     span: Span,
 ) -> Result<SpannedValue, UnifyError> {
-    let resolved = resolve_refs_inner(arg, path, root, seen)?;
     match name {
-        "increment" => match resolved.kind {
+        "increment" => match arg.kind {
             ValueKind::Int(n) => Ok(SpannedValue {
                 span,
                 kind: ValueKind::Int(n + 1),
@@ -131,18 +128,272 @@ fn execute_call(
                 kind: ValueKind::Call(
                     name.to_string(),
                     Box::new(SpannedValue {
-                        span: resolved.span,
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "abs" => match arg.kind {
+            ValueKind::Int(n) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Int(n.abs()),
+            }),
+            ValueKind::Float(n) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Float(n.abs()),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "to_string" => match arg.kind {
+            ValueKind::Int(n) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(n.to_string()),
+            }),
+            ValueKind::Float(n) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(n.to_string()),
+            }),
+            ValueKind::Bool(b) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(b.to_string()),
+            }),
+            ValueKind::String(s) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(s),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "from_string" => match &arg.kind {
+            ValueKind::String(s) => match s.parse::<i64>() {
+                Ok(n) => Ok(SpannedValue {
+                    span,
+                    kind: ValueKind::Int(n),
+                }),
+                Err(_) => Ok(SpannedValue {
+                    span,
+                    kind: ValueKind::Call(name.to_string(), Box::new(arg)),
+                }),
+            },
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other.clone(),
+                    }),
+                ),
+            }),
+        },
+        "length" => match arg.kind {
+            ValueKind::String(s) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Int(s.chars().count() as i64),
+            }),
+            ValueKind::Array(items) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Int(items.len() as i64),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "to_lowercase" => match arg.kind {
+            ValueKind::String(s) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(s.to_lowercase()),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "to_uppercase" => match arg.kind {
+            ValueKind::String(s) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(s.to_uppercase()),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "trim" => match arg.kind {
+            ValueKind::String(s) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::String(s.trim().to_string()),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "keys" => match arg.kind {
+            ValueKind::Object(members) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Array(
+                    members
+                        .into_iter()
+                        .map(|(k, _, _, _)| SpannedValue {
+                            span,
+                            kind: ValueKind::String(k),
+                        })
+                        .collect(),
+                ),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "values" => match arg.kind {
+            ValueKind::Object(members) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Array(members.into_iter().map(|(_, v, _, _)| v).collect()),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
+                        kind: other,
+                    }),
+                ),
+            }),
+        },
+        "not" => match arg.kind {
+            ValueKind::Bool(b) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(!b),
+            }),
+            other => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Call(
+                    name.to_string(),
+                    Box::new(SpannedValue {
+                        span: arg.span,
                         kind: other,
                     }),
                 ),
             }),
         },
         _ => Err(UnifyError {
-            msg: add_path(path, format!("unknown function {}", name)),
+            msg: add_path(path, format!("unknown native function {}", name)),
             span,
             prev_span: span,
         }),
     }
+}
+
+fn execute_call(
+    name: &str,
+    arg: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    let resolved = resolve_refs_inner(arg, path, root, seen)?;
+
+    if name == "native" {
+        if let ValueKind::Object(members) = resolved.kind {
+            let mut func = None;
+            let mut arg_val = None;
+            for (k, v, _, _) in members {
+                if k == "function" {
+                    if let ValueKind::String(s) = v.kind {
+                        func = Some(s);
+                    }
+                } else if k == "arg" {
+                    arg_val = Some(v);
+                }
+            }
+            if let (Some(f), Some(a)) = (func, arg_val) {
+                return execute_native(&f, a, path, span);
+            }
+        }
+        return Err(UnifyError {
+            msg: add_path(path, "malformed native call".into()),
+            span,
+            prev_span: span,
+        });
+    }
+
+    if let Some(def) = lookup(root, name) {
+        if let ValueKind::Object(members) = &def.kind {
+            let mut param = None;
+            let mut ret = None;
+            for (k, v, _, _) in members {
+                if k == "arg" {
+                    param = Some(v.clone());
+                } else if k == "return" {
+                    ret = Some(v.clone());
+                }
+            }
+            if let (Some(p), Some(r)) = (param, ret) {
+                let arg_val = unify_spanned(&p, &resolved, path, root)?;
+                let mut env = root.clone();
+                env.insert("arg".to_string(), arg_val);
+                return resolve_refs_inner(&r, path, &env, seen);
+            }
+        }
+    }
+
+    Ok(SpannedValue {
+        span,
+        kind: ValueKind::Call(name.to_string(), Box::new(resolved)),
+    })
 }
 
 fn execute_operator(
@@ -156,6 +407,31 @@ fn execute_operator(
 ) -> Result<SpannedValue, UnifyError> {
     let l = resolve_refs_inner(left, path, root, seen)?;
     let r = resolve_refs_inner(right, path, root, seen)?;
+
+    if let Some(def) = lookup(root, op) {
+        if let ValueKind::Object(members) = &def.kind {
+            let mut l_def = None;
+            let mut r_def = None;
+            let mut ret = None;
+            for (k, v, _, _) in members {
+                match k.as_str() {
+                    "left" => l_def = Some(v.clone()),
+                    "right" => r_def = Some(v.clone()),
+                    "return" => ret = Some(v.clone()),
+                    _ => {}
+                }
+            }
+            if let (Some(lp), Some(rp), Some(rv)) = (l_def, r_def, ret) {
+                let l_val = unify_spanned(&lp, &l, path, root)?;
+                let r_val = unify_spanned(&rp, &r, path, root)?;
+                let mut env = root.clone();
+                env.insert("left".to_string(), l_val);
+                env.insert("right".to_string(), r_val);
+                return resolve_refs_inner(&rv, path, &env, seen);
+            }
+        }
+    }
+
     match op {
         "+" => match (l.kind, r.kind) {
             (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
@@ -181,6 +457,142 @@ fn execute_operator(
             (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
                 span,
                 kind: ValueKind::Int(a - b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        "and" => match (l.kind, r.kind) {
+            (ValueKind::Bool(a), ValueKind::Bool(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a && b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        "or" => match (l.kind, r.kind) {
+            (ValueKind::Bool(a), ValueKind::Bool(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a || b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        ">" => match (l.kind, r.kind) {
+            (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a > b),
+            }),
+            (ValueKind::Float(a), ValueKind::Float(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a > b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        "<" => match (l.kind, r.kind) {
+            (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a < b),
+            }),
+            (ValueKind::Float(a), ValueKind::Float(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a < b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        ">=" => match (l.kind, r.kind) {
+            (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a >= b),
+            }),
+            (ValueKind::Float(a), ValueKind::Float(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a >= b),
+            }),
+            (lk, rk) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::OpCall(
+                    op.to_string(),
+                    Box::new(SpannedValue {
+                        span: l.span,
+                        kind: lk,
+                    }),
+                    Box::new(SpannedValue {
+                        span: r.span,
+                        kind: rk,
+                    }),
+                ),
+            }),
+        },
+        "<=" => match (l.kind, r.kind) {
+            (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a <= b),
+            }),
+            (ValueKind::Float(a), ValueKind::Float(b)) => Ok(SpannedValue {
+                span,
+                kind: ValueKind::Bool(a <= b),
             }),
             (lk, rk) => Ok(SpannedValue {
                 span,
@@ -554,7 +966,13 @@ fn unify_tree_inner(
                 } else {
                     format!("{}.{}", path, k)
                 };
-                let unified_v = unify_tree_inner(v, &new_path, root, false)?;
+                let unified_v = if anns.contains(&Annotation::Function)
+                    || anns.contains(&Annotation::Operator)
+                {
+                    v.clone()
+                } else {
+                    unify_tree_inner(v, &new_path, root, false)?
+                };
                 all_values
                     .entry(k.clone())
                     .or_default()
@@ -691,6 +1109,10 @@ fn resolve_refs_inner(
         ValueKind::Object(members) => {
             let mut out = Vec::new();
             for (k, v, span, anns) in members {
+                if anns.contains(&Annotation::Function) || anns.contains(&Annotation::Operator) {
+                    out.push((k.clone(), v.clone(), *span, anns.clone()));
+                    continue;
+                }
                 let new_path = if path.is_empty() {
                     k.clone()
                 } else {
