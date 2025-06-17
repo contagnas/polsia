@@ -119,7 +119,7 @@ fn execute_call(
     seen: &mut std::collections::HashSet<String>,
     span: Span,
 ) -> Result<SpannedValue, UnifyError> {
-    let resolved = resolve_refs_inner(arg, path, root, seen)?;
+    let resolved = resolve_refs_inner_with_map(arg, path, root, seen)?;
     match name {
         "increment" => match resolved.kind {
             ValueKind::Int(n) => Ok(SpannedValue {
@@ -154,8 +154,8 @@ fn execute_operator(
     seen: &mut std::collections::HashSet<String>,
     span: Span,
 ) -> Result<SpannedValue, UnifyError> {
-    let l = resolve_refs_inner(left, path, root, seen)?;
-    let r = resolve_refs_inner(right, path, root, seen)?;
+    let l = resolve_refs_inner_with_map(left, path, root, seen)?;
+    let r = resolve_refs_inner_with_map(right, path, root, seen)?;
     match op {
         "+" => match (l.kind, r.kind) {
             (ValueKind::Int(a), ValueKind::Int(b)) => Ok(SpannedValue {
@@ -374,6 +374,49 @@ fn lookup<'a>(root: &'a BTreeMap<String, SpannedValue>, path: &str) -> Option<&'
         }
     }
     Some(current)
+}
+
+fn lookup_from<'a>(start: &'a SpannedValue, path: &str) -> Option<&'a SpannedValue> {
+    if path.is_empty() {
+        return Some(start);
+    }
+    let mut current = start;
+    for seg in path.split('.') {
+        match &current.kind {
+            ValueKind::Object(members) => match members.iter().find(|(k, _, _, _)| k == seg) {
+                Some((_, v, _, _)) => current = v,
+                None => return None,
+            },
+            _ => return None,
+        }
+    }
+    Some(current)
+}
+
+fn lookup_path<'a>(root: &'a SpannedValue, path: &str) -> Option<&'a SpannedValue> {
+    lookup_from(root, path)
+}
+
+fn lookup_with_context<'a>(
+    root: &'a SpannedValue,
+    current_path: &str,
+    path: &str,
+) -> Option<&'a SpannedValue> {
+    let mut anc = Some(current_path);
+    while let Some(p) = anc {
+        if let Some(obj) = if p.is_empty() {
+            Some(root)
+        } else {
+            lookup_path(root, p)
+        } {
+            if let Some(res) = lookup_from(obj, path) {
+                return Some(res);
+            }
+        }
+        anc = p.rsplit_once('.').map(|(a, _)| a);
+    }
+    // search from root
+    lookup_from(root, path)
 }
 
 use std::collections::HashSet;
@@ -623,13 +666,13 @@ pub fn unify_tree(value: &SpannedValue) -> Result<SpannedValue, UnifyError> {
         }
     }
     let unified = unify_tree_inner(value, "", &mut root, true)?;
-    resolve_refs(&unified, "", &root)
+    resolve_refs(&unified, "", &unified)
 }
 
 fn resolve_refs(
     value: &SpannedValue,
     path: &str,
-    root: &BTreeMap<String, SpannedValue>,
+    root: &SpannedValue,
 ) -> Result<SpannedValue, UnifyError> {
     let mut seen = HashSet::new();
     resolve_refs_inner(value, path, root, &mut seen)
@@ -638,35 +681,42 @@ fn resolve_refs(
 fn resolve_refs_inner(
     value: &SpannedValue,
     path: &str,
-    root: &BTreeMap<String, SpannedValue>,
+    root: &SpannedValue,
     seen: &mut HashSet<String>,
 ) -> Result<SpannedValue, UnifyError> {
     match &value.kind {
-        ValueKind::Reference(p) => match lookup(root, p) {
-            Some(v) => {
-                if !seen.insert(p.clone()) {
-                    if !matches!(v.kind, ValueKind::Reference(_)) {
-                        return Err(UnifyError {
-                            msg: add_path(path, "infinite structural cycle".into()),
-                            span: value.span,
-                            prev_span: value.span,
-                        });
+        ValueKind::Reference(p) => {
+            let parent_path = path.rsplit_once('.').map(|(a, _)| a).unwrap_or("");
+            match lookup_with_context(root, parent_path, p) {
+                Some(v) => {
+                    if !seen.insert(p.clone()) {
+                        if !matches!(v.kind, ValueKind::Reference(_)) {
+                            return Err(UnifyError {
+                                msg: add_path(path, "infinite structural cycle".into()),
+                                span: value.span,
+                                prev_span: value.span,
+                            });
+                        }
+                        return Ok(value.clone());
                     }
-                    return Ok(value.clone());
+                    let res = resolve_refs_inner(v, path, root, seen);
+                    seen.remove(p);
+                    res
                 }
-                let res = resolve_refs_inner(v, path, root, seen);
-                seen.remove(p);
-                res
+                None => Err(UnifyError {
+                    msg: add_path(path, format!("unresolved reference {}", p)),
+                    span: value.span,
+                    prev_span: value.span,
+                }),
             }
-            None => Err(UnifyError {
-                msg: add_path(path, format!("unresolved reference {}", p)),
-                span: value.span,
-                prev_span: value.span,
-            }),
-        },
-        ValueKind::Call(name, arg) => execute_call(name, arg, path, root, seen, value.span),
+        }
+        ValueKind::Call(name, arg) => {
+            let map = build_root_map(root);
+            execute_call(name, arg, path, &map, seen, value.span)
+        }
         ValueKind::OpCall(op, left, right) => {
-            execute_operator(op, left, right, path, root, seen, value.span)
+            let map = build_root_map(root);
+            execute_operator(op, left, right, path, &map, seen, value.span)
         }
         ValueKind::Array(items) => {
             let mut out = Vec::new();
@@ -706,6 +756,33 @@ fn resolve_refs_inner(
         }
         _ => Ok(value.clone()),
     }
+}
+
+fn resolve_refs_inner_with_map(
+    value: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut HashSet<String>,
+) -> Result<SpannedValue, UnifyError> {
+    let obj = SpannedValue {
+        span: SimpleSpan::new((), 0..0),
+        kind: ValueKind::Object(
+            root.iter()
+                .map(|(k, v)| (k.clone(), v.clone(), SimpleSpan::new((), 0..0), Vec::new()))
+                .collect(),
+        ),
+    };
+    resolve_refs_inner(value, path, &obj, seen)
+}
+
+fn build_root_map(root: &SpannedValue) -> BTreeMap<String, SpannedValue> {
+    let mut out = BTreeMap::new();
+    if let ValueKind::Object(members) = &root.kind {
+        for (k, v, _, _) in members {
+            out.insert(k.clone(), v.clone());
+        }
+    }
+    out
 }
 
 fn value_to_kind(j: Value) -> ValueKind {

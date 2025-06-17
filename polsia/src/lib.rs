@@ -1244,4 +1244,99 @@ foo: increment my.favorite.number
         let src = "four: 2 + 2\nfour: 5 - 1\nfour: 3 + 1";
         must_unify(src);
     }
+
+    #[test]
+    fn reference_search_upwards() {
+        let src = r#"
+level1: {
+  level2: {
+    level3: {
+      source: "hello"
+      target: source
+    }
+  }
+}
+"#;
+        let expected =
+            must_unify("level1: { level2: { level3: { source: \"hello\" target: \"hello\" } } }");
+        let unified = must_unify(src);
+        assert_eq!(unified.to_value(), expected.to_value());
+    }
+
+    #[test]
+    fn reference_search_root_fallback() {
+        let src = r#"
+level1: {
+  level2: {
+    level3: {
+      target: source
+    }
+  }
+}
+source: "hello"
+"#;
+        let expected =
+            must_unify("level1: { level2: { level3: { target: \"hello\" } } }\nsource: \"hello\"");
+        let unified = must_unify(src);
+        assert_eq!(unified.to_value(), expected.to_value());
+    }
+
+    #[test]
+    fn reference_search_parent() {
+        let src = r#"
+level1: {
+  level2: {
+    source: "hello"
+    level3: { target: source }
+  }
+}
+"#;
+        let expected =
+            must_unify("level1: { level2: { source: \"hello\", level3: { target: \"hello\" } } }");
+        let unified = must_unify(src);
+        assert_eq!(unified.to_value(), expected.to_value());
+    }
+
+    #[test]
+    fn reference_search_nested_path() {
+        let src = r#"
+level1: {
+  level2: {
+    level2_1: source: "hello"
+    level3: { target: level2_1.source }
+  }
+}
+"#;
+        let expected = must_unify(
+            "level1: { level2: { level2_1: { source: \"hello\" }, level3: { target: \"hello\" } } }",
+        );
+        let unified = must_unify(src);
+        assert_eq!(unified.to_value(), expected.to_value());
+    }
+
+    #[test]
+    fn reference_search_fails_missing() {
+        let src = r#"
+level3: source: "hello"
+level1: {
+  level2: {
+    level3: { target: source }
+  }
+}
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn reference_search_fails_missing_parent() {
+        let src = r#"
+level1: {
+  level2: {
+    level2_1: source: "hello"
+    level3: { target: source }
+  }
+}
+"#;
+        must_err(src);
+    }
 }
