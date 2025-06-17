@@ -376,6 +376,39 @@ fn lookup<'a>(root: &'a BTreeMap<String, SpannedValue>, path: &str) -> Option<&'
     Some(current)
 }
 
+fn lookup_scoped<'a>(
+    root: &'a BTreeMap<String, SpannedValue>,
+    current_path: &str,
+    reference: &str,
+) -> Option<&'a SpannedValue> {
+    let mut context: Vec<&str> = if current_path.is_empty() {
+        Vec::new()
+    } else {
+        current_path.split('.').collect()
+    };
+    if !context.is_empty() {
+        context.pop();
+    }
+    loop {
+        let candidate = if context.is_empty() {
+            reference.to_string()
+        } else {
+            let mut s = context.join(".");
+            s.push('.');
+            s.push_str(reference);
+            s
+        };
+        if let Some(v) = lookup(root, &candidate) {
+            return Some(v);
+        }
+        if context.is_empty() {
+            break;
+        }
+        context.pop();
+    }
+    None
+}
+
 use std::collections::HashSet;
 
 pub fn unify_spanned(
@@ -403,7 +436,7 @@ fn unify_spanned_inner(
             if !seen.insert(pa.clone()) {
                 return Ok(b.clone());
             }
-            let res = match lookup(root, pa) {
+            let res = match lookup_scoped(root, path, pa) {
                 Some(val) => unify_spanned_inner(val, b, path, root, seen),
                 None => Err(UnifyError {
                     msg: add_path(path, format!("unresolved reference {}", pa)),
@@ -418,7 +451,7 @@ fn unify_spanned_inner(
             if !seen.insert(pb.clone()) {
                 return Ok(a.clone());
             }
-            let res = match lookup(root, pb) {
+            let res = match lookup_scoped(root, path, pb) {
                 Some(val) => unify_spanned_inner(a, val, path, root, seen),
                 None => Err(UnifyError {
                     msg: add_path(path, format!("unresolved reference {}", pb)),
@@ -642,7 +675,7 @@ fn resolve_refs_inner(
     seen: &mut HashSet<String>,
 ) -> Result<SpannedValue, UnifyError> {
     match &value.kind {
-        ValueKind::Reference(p) => match lookup(root, p) {
+        ValueKind::Reference(p) => match lookup_scoped(root, path, p) {
             Some(v) => {
                 if !seen.insert(p.clone()) {
                     if !matches!(v.kind, ValueKind::Reference(_)) {

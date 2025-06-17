@@ -1244,4 +1244,161 @@ foo: increment my.favorite.number
         let src = "four: 2 + 2\nfour: 5 - 1\nfour: 3 + 1";
         must_unify(src);
     }
+
+    #[test]
+    fn reference_search_upwards_then_root_direct() {
+        let src = r#"
+            level1: {
+              level2: {
+                level3: {
+                  source: "hello"
+                  target: source
+                }
+              }
+            }
+        "#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "level1".into(),
+                Value::Object(vec![(
+                    "level2".into(),
+                    Value::Object(vec![(
+                        "level3".into(),
+                        Value::Object(vec![
+                            ("source".into(), Value::String("hello".into())),
+                            ("target".into(), Value::String("hello".into())),
+                        ]),
+                    )]),
+                )]),
+            )])
+        );
+    }
+
+    #[test]
+    fn reference_search_upwards_then_root_external_source() {
+        let src = r#"
+            level1: {
+              level2: {
+                level3: {
+                  target: source
+                }
+              }
+            }
+            source: "hello"
+        "#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![
+                (
+                    "level1".into(),
+                    Value::Object(vec![(
+                        "level2".into(),
+                        Value::Object(vec![(
+                            "level3".into(),
+                            Value::Object(vec![("target".into(), Value::String("hello".into())),]),
+                        )]),
+                    )]),
+                ),
+                ("source".into(), Value::String("hello".into())),
+            ])
+        );
+    }
+
+    #[test]
+    fn reference_search_upwards_parent() {
+        let src = r#"
+            level1: {
+              level2: {
+                source: "hello"
+                level3: {
+                  target: source
+                }
+              }
+            }
+        "#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "level1".into(),
+                Value::Object(vec![(
+                    "level2".into(),
+                    Value::Object(vec![
+                        ("source".into(), Value::String("hello".into())),
+                        (
+                            "level3".into(),
+                            Value::Object(vec![("target".into(), Value::String("hello".into())),]),
+                        ),
+                    ]),
+                )]),
+            )])
+        );
+    }
+
+    #[test]
+    fn reference_search_upwards_with_path() {
+        let src = r#"
+            level1: {
+              level2: {
+                level2_1: source: "hello"
+                level3: {
+                  target: level2_1.source
+                }
+              }
+            }
+        "#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "level1".into(),
+                Value::Object(vec![(
+                    "level2".into(),
+                    Value::Object(vec![
+                        (
+                            "level2_1".into(),
+                            Value::Object(vec![("source".into(), Value::String("hello".into())),]),
+                        ),
+                        (
+                            "level3".into(),
+                            Value::Object(vec![("target".into(), Value::String("hello".into())),]),
+                        ),
+                    ]),
+                )]),
+            )])
+        );
+    }
+
+    #[test]
+    fn reference_upwards_negative_root_only() {
+        let src = r#"
+            level3: source: "hello"
+            level1: {
+              level2: {
+                level3: {
+                  target: source
+                }
+              }
+            }
+        "#;
+        must_err(src);
+    }
+
+    #[test]
+    fn reference_upwards_negative_missing_in_scope() {
+        let src = r#"
+            level1: {
+              level2: {
+                level2_1: source: "hello"
+                level3: {
+                  target: source
+                }
+              }
+            }
+        "#;
+        must_err(src);
+    }
 }
