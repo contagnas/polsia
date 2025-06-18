@@ -1156,6 +1156,62 @@ pet: says: "meow"
     }
 
     #[test]
+    fn union_reference_absolute() {
+        let src = r#"
+foo: {
+  bar: {
+    baz: foo.bar.qux | "goodbye"
+  }
+}
+
+foo: bar: qux: "hello, world"
+foo: bar: baz: "hello, world"
+"#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "foo".into(),
+                Value::Object(vec![(
+                    "bar".into(),
+                    Value::Object(vec![
+                        ("baz".into(), Value::String("hello, world".into())),
+                        ("qux".into(), Value::String("hello, world".into())),
+                    ]),
+                )]),
+            )])
+        );
+    }
+
+    #[test]
+    fn union_reference_relative() {
+        let src = r#"
+foo: {
+  bar: {
+    baz: qux | "goodbye"
+  }
+  qux: "hello, world"
+}
+
+foo: bar: baz: "hello, world"
+"#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "foo".into(),
+                Value::Object(vec![
+                    (
+                        "bar".into(),
+                        Value::Object(vec![("baz".into(), Value::String("hello, world".into()))]),
+                    ),
+                    ("qux".into(), Value::String("hello, world".into())),
+                ]),
+            )])
+        );
+    }
+
+    #[test]
     fn export_error_for_unresolved_type() {
         let src = "foo: Int";
         let err = parse_to_json(src).unwrap_err();
