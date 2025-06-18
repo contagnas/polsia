@@ -616,14 +616,137 @@ fn unify_tree_inner(
 }
 
 pub fn unify_tree(value: &SpannedValue) -> Result<SpannedValue, UnifyError> {
+    let mut pre = value.clone();
+    use std::collections::BTreeMap;
+    let empty = BTreeMap::new();
+    resolve_relative_refs(&mut pre, "".to_string(), &empty);
+
     let mut root: BTreeMap<String, SpannedValue> = BTreeMap::new();
-    if let ValueKind::Object(members) = &value.kind {
+    if let ValueKind::Object(members) = &pre.kind {
         for (k, v, _, _) in members {
             root.insert(k.clone(), v.clone());
         }
     }
-    let unified = unify_tree_inner(value, "", &mut root, true)?;
+    let unified = unify_tree_inner(&pre, "", &mut root, true)?;
     resolve_refs(&unified, "", &root)
+}
+
+fn resolve_relative_refs(
+    value: &mut SpannedValue,
+    prefix: String,
+    inherited: &BTreeMap<String, String>,
+) {
+    use std::collections::BTreeMap;
+    if let ValueKind::Object(members) = &mut value.kind {
+        let mut map: BTreeMap<String, String> = inherited.clone();
+        let mut local: BTreeMap<String, String> = BTreeMap::new();
+        for (k, v, _, _) in members.iter() {
+            let abs = if prefix.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", prefix, k)
+            };
+            collect_paths(v, &abs, k, &mut local);
+        }
+        map.extend(local.clone());
+        for (k, v, _, _) in members.iter_mut() {
+            convert_refs(v, &map, k);
+        }
+        for (k, v, _, _) in members.iter_mut() {
+            let abs = if prefix.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", prefix, k)
+            };
+            resolve_relative_refs(v, abs, &map);
+        }
+    } else {
+        match &mut value.kind {
+            ValueKind::Array(items) => {
+                for item in items {
+                    resolve_relative_refs(item, prefix.clone(), inherited);
+                }
+            }
+            ValueKind::Union(items) => {
+                for item in items {
+                    resolve_relative_refs(item, prefix.clone(), inherited);
+                }
+            }
+            ValueKind::Call(_, arg) => {
+                resolve_relative_refs(arg, prefix, inherited);
+            }
+            ValueKind::OpCall(_, left, right) => {
+                resolve_relative_refs(left, prefix.clone(), inherited);
+                resolve_relative_refs(right, prefix, inherited);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_paths(value: &SpannedValue, abs: &str, rel: &str, map: &mut BTreeMap<String, String>) {
+    map.insert(rel.to_string(), abs.to_string());
+    if let ValueKind::Object(members) = &value.kind {
+        for (k, v, _, _) in members {
+            let new_abs = if abs.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", abs, k)
+            };
+            let new_rel = if rel.is_empty() {
+                k.clone()
+            } else {
+                format!("{}.{}", rel, k)
+            };
+            collect_paths(v, &new_abs, &new_rel, map);
+        }
+    }
+}
+
+fn convert_refs(value: &mut SpannedValue, map: &BTreeMap<String, String>, current: &str) {
+    match &mut value.kind {
+        ValueKind::Reference(p) => {
+            let mut prefix = current.to_string();
+            loop {
+                let candidate = if prefix.is_empty() {
+                    p.clone()
+                } else {
+                    format!("{}.{}", prefix, p)
+                };
+                if let Some(abs) = map.get(&candidate) {
+                    *p = abs.clone();
+                    break;
+                }
+                if let Some(pos) = prefix.rfind('.') {
+                    prefix.truncate(pos);
+                } else {
+                    if prefix.is_empty() {
+                        break;
+                    }
+                    prefix.clear();
+                }
+            }
+        }
+        ValueKind::Array(items) => {
+            for item in items {
+                convert_refs(item, map, current);
+            }
+        }
+        ValueKind::Union(items) => {
+            for item in items {
+                convert_refs(item, map, current);
+            }
+        }
+        ValueKind::Call(_, arg) => {
+            convert_refs(arg, map, current);
+        }
+        ValueKind::OpCall(_, left, right) => {
+            convert_refs(left, map, current);
+            convert_refs(right, map, current);
+        }
+        ValueKind::Object(_) => {}
+        _ => {}
+    }
 }
 
 fn resolve_refs(
