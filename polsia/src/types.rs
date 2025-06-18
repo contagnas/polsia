@@ -22,6 +22,7 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Annotation {
     NoExport,
+    Function,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,7 +63,10 @@ impl SpannedValue {
             ValueKind::Array(a) => Value::Array(a.iter().map(|j| j.to_value()).collect()),
             ValueKind::Object(m) => Value::Object(
                 m.iter()
-                    .filter(|(_, _, _, anns)| !anns.contains(&Annotation::NoExport))
+                    .filter(|(_, _, _, anns)| {
+                        !anns.contains(&Annotation::NoExport)
+                            && !anns.contains(&Annotation::Function)
+                    })
                     .map(|(k, v, _, _)| (k.clone(), v.to_value()))
                     .collect(),
             ),
