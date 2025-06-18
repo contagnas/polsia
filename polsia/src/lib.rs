@@ -557,6 +557,108 @@ mod tests {
     }
 
     #[test]
+    fn relative_reference_local() {
+        let src = r#"
+level1: {
+  level2: {
+    level3: {
+      source: "hello"
+      target: source
+    }
+  }
+}
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_falls_back_to_root() {
+        let src = r#"
+level1: {
+  level2: {
+    level3: {
+      target: source
+    }
+  }
+}
+source: "hello"
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_parent() {
+        let src = r#"
+level1: {
+  level2: {
+    source: "hello"
+    level3: {
+      target: source
+    }
+  }
+}
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_nested_path() {
+        let src = r#"
+level1: {
+  level2: {
+    level2_1: source: "hello"
+    level3: {
+      target: level2_1.source
+    }
+  }
+}
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_across_objects_fails() {
+        let src = r#"
+level3: source: "hello"
+level1: {
+  level2: {
+    level3: {
+      target: source
+    }
+  }
+}
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn relative_reference_missing_fails() {
+        let src = r#"
+level1: {
+  level2: {
+    level2_1: source: "hello"
+    level3: {
+      target: source
+    }
+  }
+}
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn relative_reference_across_top_objects_fails() {
+        let src = r#"
+foo: {
+  bar: baz
+}
+
+foo: baz: "hello"
+"#;
+        must_err(src);
+    }
+
+    #[test]
     fn reference_cycle_not_exportable() {
         let src = "foo: bar\nbar: foo";
         let unified = must_unify(src);
@@ -1051,6 +1153,62 @@ pet: says: "meow"
     fn duplicate_union_branch_unifies() {
         let src = "foo: true | true\nfoo: true";
         must_unify(src);
+    }
+
+    #[test]
+    fn union_reference_absolute() {
+        let src = r#"
+foo: {
+  bar: {
+    baz: foo.bar.qux | "goodbye"
+  }
+}
+
+foo: bar: qux: "hello, world"
+foo: bar: baz: "hello, world"
+"#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "foo".into(),
+                Value::Object(vec![(
+                    "bar".into(),
+                    Value::Object(vec![
+                        ("baz".into(), Value::String("hello, world".into())),
+                        ("qux".into(), Value::String("hello, world".into())),
+                    ]),
+                )]),
+            )])
+        );
+    }
+
+    #[test]
+    fn union_reference_relative() {
+        let src = r#"
+foo: {
+  bar: {
+    baz: qux | "goodbye"
+  }
+  qux: "hello, world"
+}
+
+foo: bar: baz: "hello, world"
+"#;
+        let unified = must_unify(src);
+        assert_eq!(
+            unified.to_value(),
+            Value::Object(vec![(
+                "foo".into(),
+                Value::Object(vec![
+                    (
+                        "bar".into(),
+                        Value::Object(vec![("baz".into(), Value::String("hello, world".into()))]),
+                    ),
+                    ("qux".into(), Value::String("hello, world".into())),
+                ]),
+            )])
+        );
     }
 
     #[test]
