@@ -1220,7 +1220,15 @@ foo: bar: baz: "hello, world"
 
     #[test]
     fn call_increment_literal() {
-        let src = "foo: increment 2";
+        let src = r#"
+increment: @Function
+increment: {
+  arg: Int
+  return: Int
+  return: native ["increment", arg]
+}
+foo: increment 2
+"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1238,7 +1246,16 @@ foo: bar: baz: "hello, world"
 
     #[test]
     fn call_increment_reference() {
-        let src = "two: 2\nfoo: increment two";
+        let src = r#"
+increment: @Function
+increment: {
+  arg: Int
+  return: Int
+  return: native ["increment", arg]
+}
+two: 2
+foo: increment two
+"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1256,7 +1273,16 @@ foo: bar: baz: "hello, world"
 
     #[test]
     fn call_increment_with_type() {
-        let src = "foo: Int\nfoo: increment 2";
+        let src = r#"
+increment: @Function
+increment: {
+  arg: Int
+  return: Int
+  return: native ["increment", arg]
+}
+foo: Int
+foo: increment 2
+"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {
@@ -1275,6 +1301,12 @@ foo: bar: baz: "hello, world"
     #[test]
     fn call_increment_chain() {
         let src = r#"
+increment: @Function
+increment: {
+  arg: Int
+  return: Int
+  return: native ["increment", arg]
+}
 one: Int
 one: 1
 
@@ -1302,6 +1334,12 @@ foo: increment two
     #[test]
     fn call_increment_nested_reference() {
         let src = r#"
+increment: @Function
+increment: {
+  arg: Int
+  return: Int
+  return: native ["increment", arg]
+}
 my: favorite: number: 2
 foo: increment my.favorite.number
 "#;
@@ -1358,7 +1396,16 @@ foo: increment my.favorite.number
 
     #[test]
     fn operator_with_function_result() {
-        let src = "two: increment 1\nfour: two + two";
+        let src = r#"
+increment: @Function
+increment: {
+  arg: Int
+  return: Int
+  return: native ["increment", arg]
+}
+two: increment 1
+four: two + two
+"#;
         let unified = must_unify(src);
         match &unified.kind {
             ValueKind::Object(members) => {

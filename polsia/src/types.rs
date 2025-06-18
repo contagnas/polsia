@@ -22,6 +22,7 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Annotation {
     NoExport,
+    Function,
 }
 
 #[derive(Debug, Clone, PartialEq)]
