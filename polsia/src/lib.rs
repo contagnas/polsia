@@ -557,6 +557,108 @@ mod tests {
     }
 
     #[test]
+    fn relative_reference_local() {
+        let src = r#"
+level1: {
+  level2: {
+    level3: {
+      source: "hello"
+      target: source
+    }
+  }
+}
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_falls_back_to_root() {
+        let src = r#"
+level1: {
+  level2: {
+    level3: {
+      target: source
+    }
+  }
+}
+source: "hello"
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_parent() {
+        let src = r#"
+level1: {
+  level2: {
+    source: "hello"
+    level3: {
+      target: source
+    }
+  }
+}
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_nested_path() {
+        let src = r#"
+level1: {
+  level2: {
+    level2_1: source: "hello"
+    level3: {
+      target: level2_1.source
+    }
+  }
+}
+"#;
+        must_unify(src);
+    }
+
+    #[test]
+    fn relative_reference_across_objects_fails() {
+        let src = r#"
+level3: source: "hello"
+level1: {
+  level2: {
+    level3: {
+      target: source
+    }
+  }
+}
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn relative_reference_missing_fails() {
+        let src = r#"
+level1: {
+  level2: {
+    level2_1: source: "hello"
+    level3: {
+      target: source
+    }
+  }
+}
+"#;
+        must_err(src);
+    }
+
+    #[test]
+    fn relative_reference_across_top_objects_fails() {
+        let src = r#"
+foo: {
+  bar: baz
+}
+
+foo: baz: "hello"
+"#;
+        must_err(src);
+    }
+
+    #[test]
     fn reference_cycle_not_exportable() {
         let src = "foo: bar\nbar: foo";
         let unified = must_unify(src);
