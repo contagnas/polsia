@@ -316,14 +316,22 @@ fn spanned_value_no_pad<'a>()
         );
 
         let annotation = just('@')
-            .ignore_then(text::keyword("NoExport"))
-            .map_with(|_, e| {
+            .ignore_then(choice((
+                text::keyword("NoExport"),
+                text::keyword("Function"),
+            )))
+            .map_with(|kw: &str, e| {
+                let ann = if kw == "NoExport" {
+                    Annotation::NoExport
+                } else {
+                    Annotation::Function
+                };
                 (
                     SpannedValue {
                         span: e.span(),
                         kind: ValueKind::Type(ValType::Any),
                     },
-                    vec![Annotation::NoExport],
+                    vec![ann],
                 )
             });
 

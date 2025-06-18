@@ -121,28 +121,126 @@ fn execute_call(
 ) -> Result<SpannedValue, UnifyError> {
     let resolved = resolve_refs_inner(arg, path, root, seen)?;
     match name {
-        "increment" => match resolved.kind {
-            ValueKind::Int(n) => Ok(SpannedValue {
+        "native" => match &resolved.kind {
+            ValueKind::Array(items) if items.len() == 2 => {
+                let func = &items[0];
+                let func_arg = &items[1];
+                if let ValueKind::String(f) = &func.kind {
+                    let arg_val = resolve_refs_inner(func_arg, path, root, seen)?;
+                    match f.as_str() {
+                        "increment" => match arg_val.kind {
+                            ValueKind::Int(n) => Ok(SpannedValue {
+                                span,
+                                kind: ValueKind::Int(n + 1),
+                            }),
+                            other => Ok(SpannedValue {
+                                span,
+                                kind: ValueKind::Call(
+                                    name.to_string(),
+                                    Box::new(SpannedValue {
+                                        span: resolved.span,
+                                        kind: ValueKind::Array(vec![
+                                            func.clone(),
+                                            SpannedValue {
+                                                span: arg_val.span,
+                                                kind: other,
+                                            },
+                                        ]),
+                                    }),
+                                ),
+                            }),
+                        },
+                        _ => Err(UnifyError {
+                            msg: add_path(path, format!("unknown native function {}", f)),
+                            span,
+                            prev_span: span,
+                        }),
+                    }
+                } else {
+                    Ok(SpannedValue {
+                        span,
+                        kind: ValueKind::Call(name.to_string(), Box::new(resolved.clone())),
+                    })
+                }
+            }
+            _ => Ok(SpannedValue {
                 span,
-                kind: ValueKind::Int(n + 1),
-            }),
-            other => Ok(SpannedValue {
-                span,
-                kind: ValueKind::Call(
-                    name.to_string(),
-                    Box::new(SpannedValue {
-                        span: resolved.span,
-                        kind: other,
-                    }),
-                ),
+                kind: ValueKind::Call(name.to_string(), Box::new(resolved.clone())),
             }),
         },
-        _ => Err(UnifyError {
-            msg: add_path(path, format!("unknown function {}", name)),
+        other => match root.get(other) {
+            Some(func_def) => {
+                execute_user_function(other, func_def, &resolved, path, root, seen, span)
+            }
+            None => Err(UnifyError {
+                msg: add_path(path, format!("unknown function {}", name)),
+                span,
+                prev_span: span,
+            }),
+        },
+    }
+}
+
+fn execute_user_function(
+    name: &str,
+    func_def: &SpannedValue,
+    arg: &SpannedValue,
+    path: &str,
+    root: &BTreeMap<String, SpannedValue>,
+    seen: &mut std::collections::HashSet<String>,
+    span: Span,
+) -> Result<SpannedValue, UnifyError> {
+    let resolved_arg = arg.clone();
+    let mut arg_spec: Option<SpannedValue> = None;
+    let mut return_vals: Vec<SpannedValue> = Vec::new();
+    if let ValueKind::Object(members) = &func_def.kind {
+        for (k, v, _, _) in members {
+            if k == "arg" {
+                arg_spec = match arg_spec {
+                    None => Some(v.clone()),
+                    Some(ref current) => Some(unify_spanned(current, v, path, root)?),
+                };
+            }
+            if k == "return" {
+                return_vals.push(v.clone());
+            }
+        }
+    } else {
+        return Err(UnifyError {
+            msg: add_path(path, format!("{} is not a function", name)),
             span,
             prev_span: span,
-        }),
+        });
     }
+
+    if let Some(spec) = &arg_spec {
+        let _ = unify_spanned(spec, &resolved_arg, path, root)?;
+    }
+
+    let mut extended = root.clone();
+    if let ValueKind::Object(_) = &func_def.kind {
+        let mut func_clone = func_def.clone();
+        if let ValueKind::Object(ref mut ms) = func_clone.kind {
+            if let Some((_, v, _, _)) = ms.iter_mut().find(|(k, _, _, _)| k == "arg") {
+                *v = resolved_arg.clone();
+            }
+        }
+        extended.insert(name.to_string(), func_clone);
+    }
+
+    let mut result: Option<SpannedValue> = None;
+    for ret in return_vals {
+        let evaluated = resolve_refs_inner(&ret, path, &extended, seen)?;
+        result = match result {
+            None => Some(evaluated),
+            Some(ref current) => Some(unify_spanned(current, &evaluated, path, &extended)?),
+        };
+    }
+    result.ok_or(UnifyError {
+        msg: add_path(path, format!("{} has no return", name)),
+        span,
+        prev_span: span,
+    })
 }
 
 fn execute_operator(
@@ -540,21 +638,32 @@ fn unify_tree_inner(
             })
         }
         ValueKind::Object(members) => {
-            use std::collections::HashMap;
+            use std::collections::{HashMap, HashSet};
             // Preserve the order keys first appear for stable output. Unification
             // itself must not depend on field order.
             let mut indices: HashMap<String, usize> = HashMap::new();
             let mut out: Vec<(String, SpannedValue, Span, Vec<Annotation>)> = Vec::new();
             let mut all_values: HashMap<String, Vec<SpannedValue>> = HashMap::new();
             let mut all_annotations: HashMap<String, Vec<Annotation>> = HashMap::new();
+            let mut function_keys: HashSet<String> = HashSet::new();
 
+            for (k, _, _, anns) in members {
+                if anns.contains(&Annotation::Function) {
+                    function_keys.insert(k.clone());
+                }
+            }
             for (k, v, span, anns) in members {
                 let new_path = if path.is_empty() {
                     k.clone()
                 } else {
                     format!("{}.{}", path, k)
                 };
-                let unified_v = unify_tree_inner(v, &new_path, root, false)?;
+                let is_fn = anns.contains(&Annotation::Function) || function_keys.contains(k);
+                let unified_v = if is_fn {
+                    v.clone()
+                } else {
+                    unify_tree_inner(v, &new_path, root, false)?
+                };
                 all_values
                     .entry(k.clone())
                     .or_default()
@@ -822,6 +931,10 @@ fn resolve_refs_inner(
                 } else {
                     format!("{}.{}", path, k)
                 };
+                if anns.contains(&Annotation::Function) {
+                    out.push((k.clone(), v.clone(), *span, anns.clone()));
+                    continue;
+                }
                 let resolved = resolve_refs_inner(v, &new_path, root, seen)?;
                 out.push((k.clone(), resolved, *span, anns.clone()));
             }
@@ -906,7 +1019,9 @@ fn kind_to_value(k: &ValueKind) -> Value {
         ValueKind::Array(arr) => Value::Array(arr.iter().map(|v| v.to_value()).collect()),
         ValueKind::Object(obj) => Value::Object(
             obj.iter()
-                .filter(|(_, _, _, anns)| !anns.contains(&Annotation::NoExport))
+                .filter(|(_, _, _, anns)| {
+                    !anns.contains(&Annotation::NoExport) && !anns.contains(&Annotation::Function)
+                })
                 .map(|(k, v, _, _)| (k.clone(), v.to_value()))
                 .collect(),
         ),
