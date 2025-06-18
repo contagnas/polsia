@@ -590,6 +590,9 @@ fn unify_tree_inner(
                     let mut current = values[0].clone();
                     for v in &values[1..] {
                         current = unify_spanned(&current, v, &entry_path, root)?;
+                        if is_root {
+                            root.insert(k.clone(), current.clone());
+                        }
                     }
                     if current.to_value() != out[i].1.to_value() {
                         out[i].1 = current.clone();
